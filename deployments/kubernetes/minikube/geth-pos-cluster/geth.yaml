@@ -1,0 +1,161 @@
+# Geth Execution Layer — StatefulSet (3 replicas, production-like)
+# Nodes auto-discover and peer with each other via admin RPC
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: geth
+  namespace: web3
+  labels:
+    app: geth
+    layer: execution
+spec:
+  serviceName: "geth-headless"
+  replicas: 3
+  selector:
+    matchLabels:
+      app: geth
+  template:
+    metadata:
+      labels:
+        app: geth
+        layer: execution
+    spec:
+      terminationGracePeriodSeconds: 120
+      initContainers:
+        - name: init-genesis
+          image: ethereum/client-go:v1.14.12
+          command:
+            - sh
+            - -c
+            - |
+              if [ ! -d /root/.ethereum/geth/chaindata ]; then
+                echo "🚀 Initializing genesis..."
+                geth init --datadir /root/.ethereum /genesis/genesis.json
+              else
+                echo "✅ Chain data already exists, skipping init."
+              fi
+          volumeMounts:
+            - name: geth-data
+              mountPath: /root/.ethereum
+            - name: genesis
+              mountPath: /genesis
+      containers:
+        - name: geth
+          image: ethereum/client-go:v1.14.12
+          env:
+            - name: POD_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+          command: ["sh", "-c"]
+          args:
+            - |
+              # Auto-peer script: runs in background, connects to other geth nodes
+              (
+                sleep 20
+                ORDINAL=${HOSTNAME##*-}
+                for i in 0 1 2; do
+                  [ "$i" = "$ORDINAL" ] && continue
+                  PEER="geth-${i}.geth-headless"
+                  for attempt in $(seq 1 60); do
+                    RESULT=$(wget -qO- --post-data='{"jsonrpc":"2.0","method":"admin_nodeInfo","params":[],"id":1}' \
+                      --header='Content-Type: application/json' "http://${PEER}:8545" 2>/dev/null)
+                    ENODE=$(echo "$RESULT" | grep -o '"enode://[^"]*"' | tr -d '"')
+                    if [ -n "$ENODE" ]; then
+                      # Replace 127.0.0.1 in enode with peer's DNS name
+                      ENODE=$(echo "$ENODE" | sed "s/@127\.0\.0\.1:/@${PEER}:/")
+                      wget -qO- --post-data="{\"jsonrpc\":\"2.0\",\"method\":\"admin_addPeer\",\"params\":[\"${ENODE}\"],\"id\":1}" \
+                        --header='Content-Type: application/json' http://localhost:8545 > /dev/null 2>&1
+                      echo "✅ Peered with ${PEER}: ${ENODE}"
+                      break
+                    fi
+                    echo "⏳ Waiting for ${PEER}... (attempt ${attempt})"
+                    sleep 5
+                  done
+                done
+              ) &
+
+              # Start geth (exec replaces shell so signals work correctly)
+              exec geth \
+                --datadir=/root/.ethereum \
+                --networkid=72390 \
+                --nat=extip:${POD_IP} \
+                --http \
+                --http.addr=0.0.0.0 \
+                --http.port=8545 \
+                --http.api=eth,net,web3,txpool,debug,admin \
+                --http.corsdomain=* \
+                --http.vhosts=* \
+                --ws \
+                --ws.addr=0.0.0.0 \
+                --ws.port=8546 \
+                --ws.api=eth,net,web3,txpool,debug \
+                --ws.origins=* \
+                --authrpc.addr=0.0.0.0 \
+                --authrpc.port=8551 \
+                --authrpc.jwtsecret=/secrets/jwt.hex \
+                --authrpc.vhosts=* \
+                --syncmode=full \
+                --state.scheme=path \
+                --port=30303 \
+                --verbosity=3
+          lifecycle:
+            preStop:
+              exec:
+                command: ["sh", "-c", "kill -INT 1; sleep 15"]
+          ports:
+            - containerPort: 8545
+              name: rpc
+            - containerPort: 8546
+              name: ws
+            - containerPort: 8551
+              name: engine
+            - containerPort: 30303
+              name: p2p-tcp
+              protocol: TCP
+            - containerPort: 30303
+              name: p2p-udp
+              protocol: UDP
+          volumeMounts:
+            - name: geth-data
+              mountPath: /root/.ethereum
+            - name: genesis
+              mountPath: /genesis
+            - name: jwt
+              mountPath: /secrets
+              readOnly: true
+          livenessProbe:
+            tcpSocket:
+              port: rpc
+            initialDelaySeconds: 30
+            periodSeconds: 15
+            failureThreshold: 3
+          readinessProbe:
+            tcpSocket:
+              port: rpc
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            failureThreshold: 3
+          resources:
+            requests:
+              memory: "1Gi"
+              cpu: "500m"
+            limits:
+              memory: "2Gi"
+              cpu: "1"
+      volumes:
+        - name: genesis
+          configMap:
+            name: geth-genesis
+        - name: jwt
+          secret:
+            secretName: jwt-secret
+  volumeClaimTemplates:
+    - metadata:
+        name: geth-data
+      spec:
+        storageClassName: standard
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 5Gi

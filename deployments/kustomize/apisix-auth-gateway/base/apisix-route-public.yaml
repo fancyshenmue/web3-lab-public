@@ -1,0 +1,135 @@
+apiVersion: apisix.apache.org/v2
+kind: ApisixRoute
+metadata:
+  name: auth-gateway-public
+  namespace: web3
+spec:
+  ingressClassName: apisix
+  http:
+    # --- Kratos Public ---
+    - name: kratos-public
+      match:
+        hosts:
+          - gateway.web3-local-dev.com
+        paths:
+          - /identity/*
+      plugins:
+        - name: proxy-rewrite
+          enable: true
+          config:
+            regex_uri: ["^/identity/(.*)", "/$1"]
+        - name: limit-req
+          enable: true
+          config:
+            rate: 10
+            burst: 5
+            key: remote_addr
+            rejected_code: 429
+            rejected_msg: "Rate Limit Exceeded"
+        - name: cors
+          enable: true
+          config:
+            allow_origins: "https://app.web3-local-dev.com,https://app.web3-local-dev-2.com,https://app.web3-local-dev.net,https://app.web3-local-dev-2.net,https://gateway.web3-local-dev.com,http://localhost:3000"
+            allow_methods: "GET,POST,PUT,DELETE,OPTIONS"
+            allow_headers: "Content-Type,Authorization,X-Session-Token,X-CSRF-Token"
+            allow_credential: true
+      backends:
+        - serviceName: kratos-public
+          servicePort: 4433
+
+    # --- Hydra Public ---
+    - name: hydra-public
+      match:
+        hosts:
+          - gateway.web3-local-dev.com
+        paths:
+          - /oauth2/*
+      plugins:
+        - name: limit-req
+          enable: true
+          config:
+            rate: 10
+            burst: 5
+            key: remote_addr
+            rejected_code: 429
+            rejected_msg: "Rate Limit Exceeded"
+        - name: cors
+          enable: true
+          config:
+            allow_origins: "https://app.web3-local-dev.com,https://app.web3-local-dev-2.com,https://app.web3-local-dev.net,https://app.web3-local-dev-2.net,https://gateway.web3-local-dev.com,http://localhost:3000"
+            allow_methods: "GET,POST,PUT,DELETE,OPTIONS"
+            allow_headers: "Content-Type,Authorization,X-Session-Token,X-CSRF-Token"
+            allow_credential: true
+      backends:
+        - serviceName: hydra-public
+          servicePort: 4444
+
+    # --- Hydra Userinfo & Discovery (root-level paths) ---
+    - name: hydra-userinfo
+      match:
+        hosts:
+          - gateway.web3-local-dev.com
+        paths:
+          - /userinfo
+          - /.well-known/*
+      plugins:
+        - name: cors
+          enable: true
+          config:
+            allow_origins: "https://app.web3-local-dev.com,https://app.web3-local-dev-2.com,https://app.web3-local-dev.net,https://app.web3-local-dev-2.net,https://gateway.web3-local-dev.com,http://localhost:3000"
+            allow_methods: "GET,POST,OPTIONS"
+            allow_headers: "Content-Type,Authorization"
+            allow_credential: true
+      backends:
+        - serviceName: hydra-public
+          servicePort: 4444
+
+    # --- Oathkeeper Proxy ---
+    - name: oathkeeper-proxy
+      match:
+        hosts:
+          - gateway.web3-local-dev.com
+        paths:
+          - /auth/*
+      plugins:
+        - name: proxy-rewrite
+          enable: true
+          config:
+            regex_uri: ["^/auth/(.*)", "/$1"]
+        - name: limit-req
+          enable: true
+          config:
+            rate: 20
+            burst: 10
+            key: remote_addr
+            rejected_code: 429
+            rejected_msg: "Rate Limit Exceeded"
+        - name: cors
+          enable: true
+          config:
+            allow_origins: "https://app.web3-local-dev.com,https://app.web3-local-dev-2.com,https://app.web3-local-dev.net,https://app.web3-local-dev-2.net,https://gateway.web3-local-dev.com,http://localhost:3000"
+            allow_methods: "GET,POST,PUT,DELETE,OPTIONS"
+            allow_headers: "Content-Type,Authorization,X-Session-Token,X-CSRF-Token"
+            allow_credential: true
+      backends:
+        - serviceName: oathkeeper-proxy
+          servicePort: 4455
+
+    # --- Backend API ---
+    - name: backend-api
+      match:
+        hosts:
+          - gateway.web3-local-dev.com
+        paths:
+          - /api/*
+      plugins:
+        - name: cors
+          enable: true
+          config:
+            allow_origins: "https://app.web3-local-dev.com,https://app.web3-local-dev-2.com,https://app.web3-local-dev.net,https://app.web3-local-dev-2.net,https://gateway.web3-local-dev.com,http://localhost:3000"
+            allow_methods: "GET,POST,PUT,DELETE,OPTIONS"
+            allow_headers: "Content-Type,Authorization,X-Session-Token,X-CSRF-Token"
+            allow_credential: true
+      backends:
+        - serviceName: web3-api
+          servicePort: 8080

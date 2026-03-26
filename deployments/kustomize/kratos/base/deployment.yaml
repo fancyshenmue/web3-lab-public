@@ -1,0 +1,93 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kratos-deployment
+  labels:
+    app: kratos
+    component: identity
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kratos
+      component: identity
+  template:
+    metadata:
+      labels:
+        app: kratos
+        component: identity
+    spec:
+      initContainers:
+        - name: kratos-migrate
+          image: oryd/kratos:v1.2.0
+          command: ["kratos"]
+          args:
+            - migrate
+            - sql
+            - -e
+            - --yes
+            - --config
+            - /etc/config/kratos/kratos.yml
+          envFrom:
+            - configMapRef:
+                name: kratos-env
+          volumeMounts:
+            - name: kratos-config-volume
+              mountPath: /etc/config/kratos
+              readOnly: true
+      containers:
+        - name: kratos
+          image: oryd/kratos:v1.2.0
+          command: ["kratos"]
+          args:
+            - serve
+            - all
+            - --config
+            - /etc/config/kratos/kratos.yml
+          ports:
+            - name: http-public
+              containerPort: 4433
+              protocol: TCP
+            - name: http-admin
+              containerPort: 4434
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: kratos-env
+          volumeMounts:
+            - name: kratos-config-volume
+              mountPath: /etc/config/kratos
+              readOnly: true
+          livenessProbe:
+            httpGet:
+              path: /admin/health/alive
+              port: http-admin
+              httpHeaders:
+                - name: Host
+                  value: localhost
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /admin/health/ready
+              port: http-admin
+              httpHeaders:
+                - name: Host
+                  value: localhost
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 200m
+              memory: 256Mi
+      volumes:
+        - name: kratos-config-volume
+          configMap:
+            name: kratos-config

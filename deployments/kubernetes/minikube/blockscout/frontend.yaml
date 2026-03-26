@@ -1,0 +1,79 @@
+# Blockscout Frontend — Deployment (Next.js)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: blockscout-frontend
+  namespace: web3
+  labels:
+    app: blockscout-frontend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: blockscout-frontend
+  template:
+    metadata:
+      labels:
+        app: blockscout-frontend
+    spec:
+      containers:
+        - name: frontend
+          image: ghcr.io/blockscout/frontend:latest
+          ports:
+            - containerPort: 3000
+              name: http
+          env:
+            - name: HOSTNAME
+              value: "0.0.0.0"
+            - name: NEXT_PUBLIC_APP_HOST
+              value: "0.0.0.0"
+            - name: NEXT_PUBLIC_API_HOST
+              value: "localhost"
+            - name: NEXT_PUBLIC_API_PORT
+              value: "3001"
+            - name: NEXT_PUBLIC_API_PROTOCOL
+              value: "http"
+            - name: NEXT_PUBLIC_API_WEBSOCKET_PROTOCOL
+              value: "ws"
+            - name: NEXT_PUBLIC_STATS_API_HOST
+              value: "http://localhost:8150"
+            - name: NEXT_PUBLIC_NETWORK_NAME
+              value: "Web3 Lab"
+            - name: NEXT_PUBLIC_NETWORK_SHORT_NAME
+              value: "W3L"
+            - name: NEXT_PUBLIC_NETWORK_ID
+              value: "72390"
+            - name: NEXT_PUBLIC_NETWORK_CURRENCY_NAME
+              value: "labETH"
+            - name: NEXT_PUBLIC_NETWORK_CURRENCY_SYMBOL
+              value: "labETH"
+            - name: NEXT_PUBLIC_NETWORK_CURRENCY_DECIMALS
+              value: "18"
+            - name: NEXT_PUBLIC_HOMEPAGE_CHARTS
+              value: "[\"daily_txs\"]"
+            - name: NEXT_PUBLIC_IS_TESTNET
+              value: "true"
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "250m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+---
+# ClusterIP service for Frontend
+apiVersion: v1
+kind: Service
+metadata:
+  name: blockscout-frontend
+  namespace: web3
+  labels:
+    app: blockscout-frontend
+spec:
+  type: ClusterIP
+  ports:
+    - port: 3000
+      targetPort: 3000
+      name: http
+  selector:
+    app: blockscout-frontend

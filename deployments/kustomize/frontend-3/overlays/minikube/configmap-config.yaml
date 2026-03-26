@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: web3-frontend-3-config
+data:
+  config.json: |
+    {
+      "gatewayUrl": "https://gateway.web3-local-dev.com",
+      "clientId": "app-3-client-id",
+      "authDomain": "app.web3-local-dev.net"
+    }

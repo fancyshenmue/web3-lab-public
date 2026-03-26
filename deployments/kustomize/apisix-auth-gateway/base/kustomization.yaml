@@ -1,0 +1,4 @@
+resources:
+  - apisix-route-public.yaml
+  - apisix-route-admin.yaml
+  - apisix-consumer.yaml

@@ -1,0 +1,68 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: oathkeeper-deployment
+  labels:
+    app: oathkeeper
+    component: api-gateway
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: oathkeeper
+  template:
+    metadata:
+      labels:
+        app: oathkeeper
+        component: api-gateway
+    spec:
+      containers:
+        - name: oathkeeper
+          image: oryd/oathkeeper:v0.40.9
+          command:
+            - oathkeeper
+          args:
+            - serve
+            - --config
+            - /etc/config/oathkeeper/oathkeeper.yml
+          envFrom:
+            - configMapRef:
+                name: oathkeeper-env
+          ports:
+            - name: proxy
+              containerPort: 4455
+              protocol: TCP
+            - name: api
+              containerPort: 4456
+              protocol: TCP
+          volumeMounts:
+            - name: oathkeeper-config-volume
+              mountPath: /etc/config/oathkeeper
+              readOnly: true
+          livenessProbe:
+            httpGet:
+              path: /health/alive
+              port: 4456
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 5
+          readinessProbe:
+            httpGet:
+              path: /health/ready
+              port: 4456
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 5
+          resources:
+            limits:
+              cpu: 500m
+              memory: 512Mi
+            requests:
+              cpu: 100m
+              memory: 128Mi
+      volumes:
+        - name: oathkeeper-config-volume
+          configMap:
+            name: oathkeeper-config

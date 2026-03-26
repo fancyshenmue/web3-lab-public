@@ -1,0 +1,73 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: hydra-config
+  labels:
+    app: hydra
+    component: oauth2
+data:
+  hydra.yml: |
+    version: v2.3.0
+
+    dsn: env://DSN
+
+    serve:
+      cookies:
+        same_site_mode: Lax
+      public:
+        cors:
+          enabled: true
+          allowed_methods:
+            - POST
+            - GET
+            - PUT
+            - PATCH
+            - DELETE
+          allowed_headers:
+            - Authorization
+            - Content-Type
+            - Cookie
+          exposed_headers:
+            - Content-Type
+            - Set-Cookie
+      admin:
+        cors:
+          enabled: true
+          allowed_methods:
+            - POST
+            - GET
+            - PUT
+            - PATCH
+            - DELETE
+          allowed_headers:
+            - Authorization
+            - Content-Type
+          exposed_headers:
+            - Content-Type
+
+    urls:
+      self:
+        issuer: env://URLS_SELF_ISSUER
+      consent: env://URLS_CONSENT
+      login: env://URLS_LOGIN
+      logout: env://URLS_LOGOUT
+
+    secrets:
+      system:
+        - env://SECRETS_SYSTEM_0
+
+    log:
+      level: env://LOG_LEVEL
+      format: json
+
+    oauth2:
+      expose_internal_errors: env://OAUTH2_EXPOSE_INTERNAL_ERRORS
+
+    ttl:
+      access_token: 24h
+      refresh_token: 720h
+      id_token: 24h
+      auth_code: 10m
+
+    strategies:
+      access_token: opaque

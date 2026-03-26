@@ -1,0 +1,246 @@
+# Beacon Node (Consensus Layer) — StatefulSet (3 replicas, production-like)
+# Each beacon-N connects to its paired geth-N via Engine API
+# Init containers:
+#   1. init-config: generates ordinal-specific config.yaml for paired geth
+#   2. init-genesis: generates genesis SSZ via prysmctl for custom chain config
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: beacon
+  namespace: web3
+  labels:
+    app: beacon
+    layer: consensus
+spec:
+  serviceName: "beacon-headless"
+  replicas: 3
+  selector:
+    matchLabels:
+      app: beacon
+  template:
+    metadata:
+      labels:
+        app: beacon
+        layer: consensus
+    spec:
+      terminationGracePeriodSeconds: 60
+      initContainers:
+        - name: init-config
+          image: busybox:1.36
+          command: ["sh", "-c"]
+          args:
+            - |
+              ORDINAL=${HOSTNAME##*-}
+              cat > /dynamic-config/config.yaml << EOF
+              execution-endpoint: "http://geth-${ORDINAL}.geth-headless.web3.svc.cluster.local:8551"
+              p2p-host-dns: "beacon-${ORDINAL}.beacon-headless.web3.svc.cluster.local"
+              EOF
+
+              # Append P2P peer entries from beacon-peers ConfigMap (if available)
+              if [ -f /peers/peers.txt ]; then
+                echo "🔗 Found beacon-peers ConfigMap, adding P2P peers..."
+                echo "peer:" >> /dynamic-config/config.yaml
+                while IFS= read -r line; do
+                  # Skip own peer entry and empty lines
+                  [ -z "$line" ] && continue
+                  PEER_ORDINAL=$(echo "$line" | cut -d'|' -f1)
+                  MULTIADDR=$(echo "$line" | cut -d'|' -f2)
+                  if [ "$PEER_ORDINAL" != "$ORDINAL" ]; then
+                    echo "  - \"${MULTIADDR}\"" >> /dynamic-config/config.yaml
+                    echo "  ✅ Added peer: beacon-${PEER_ORDINAL}"
+                  fi
+                done < /peers/peers.txt
+              else
+                echo "⚠️  No beacon-peers ConfigMap found, skipping P2P peering."
+              fi
+
+              echo "--- Final dynamic config ---"
+              cat /dynamic-config/config.yaml
+          volumeMounts:
+            - name: dynamic-config
+              mountPath: /dynamic-config
+            - name: beacon-peers
+              mountPath: /peers
+              readOnly: true
+        - name: init-genesis
+          image: busybox:1.36
+          command: ["sh", "-c"]
+          args:
+            - |
+              if [ -f /data/beacon/beaconchaindata/beaconchain.db ]; then
+                echo "✅ Beacon DB exists, skipping genesis generation."
+              else
+                echo "🚀 No Beacon DB found, genesis will be generated."
+                touch /genesis-data/needs-genesis
+              fi
+          volumeMounts:
+            - name: beacon-data
+              mountPath: /data/beacon
+            - name: genesis-data
+              mountPath: /genesis-data
+        - name: wait-for-geth
+          image: busybox:1.36
+          command: ["sh", "-c"]
+          args:
+            - |
+              if [ ! -f /genesis-data/needs-genesis ]; then
+                echo "✅ Genesis not needed, skipping Geth wait."
+                exit 0
+              fi
+              ORDINAL=${HOSTNAME##*-}
+              GETH_URL="http://geth-${ORDINAL}.geth-headless.web3.svc.cluster.local:8545"
+              echo "⏳ Waiting for Geth at ${GETH_URL}..."
+              until wget -qO- --timeout=2 --post-data='{"jsonrpc":"2.0","method":"eth_blockNumber","params":[],"id":1}' --header='Content-Type: application/json' "${GETH_URL}" 2>/dev/null | grep -q result; do
+                echo "  Still waiting..."
+                sleep 3
+              done
+              echo "✅ Geth is ready!"
+          volumeMounts:
+            - name: genesis-data
+              mountPath: /genesis-data
+        - name: generate-genesis
+          image: gcr.io/prysmaticlabs/prysm/cmd/prysmctl:v5.2.0
+          env:
+            - name: GENESIS_TIME
+              valueFrom:
+                configMapKeyRef:
+                  name: genesis-time
+                  key: time
+          args:
+            - testnet
+            - generate-genesis
+            - --fork=deneb
+            - --num-validators=64
+            - --chain-config-file=/config/config.yaml
+            - --geth-genesis-json-in=/geth-genesis/genesis.json
+            - --execution-endpoint=http://geth-0.geth-headless.web3.svc.cluster.local:8545
+            - --override-eth1data
+            - --genesis-time-delay=0
+            - --genesis-time=$(GENESIS_TIME)
+            - --output-ssz=/genesis-data/genesis.ssz
+          volumeMounts:
+            - name: config
+              mountPath: /config
+              readOnly: true
+            - name: genesis-data
+              mountPath: /genesis-data
+            - name: geth-genesis
+              mountPath: /geth-genesis
+              readOnly: true
+        - name: check-db
+          image: busybox:1.36
+          command: ["sh", "-c"]
+          args:
+            - |
+              if [ -f /data/beacon/beaconchaindata/beaconchain.db ]; then
+                echo "✅ Beacon DB exists, removing genesis.ssz to skip re-init."
+                rm -f /genesis-data/genesis.ssz
+              else
+                echo "🚀 No Beacon DB found, genesis.ssz will be loaded."
+                # Add genesis-state to dynamic config so beacon loads it
+                echo 'genesis-state: "/genesis-data/genesis.ssz"' >> /dynamic-config/config.yaml
+              fi
+          volumeMounts:
+            - name: beacon-data
+              mountPath: /data/beacon
+            - name: dynamic-config
+              mountPath: /dynamic-config
+            - name: genesis-data
+              mountPath: /genesis-data
+      containers:
+        - name: beacon
+          image: gcr.io/prysmaticlabs/prysm/beacon-chain:v5.1.2
+          args:
+            - --datadir=/data/beacon
+            - --min-sync-peers=0
+            - --interop-eth1data-votes
+            - --chain-config-file=/config/config.yaml
+            - --config-file=/dynamic-config/config.yaml
+            - --contract-deployment-block=0
+            - --chain-id=72390
+            - --rpc-host=0.0.0.0
+            - --rpc-port=4000
+            - --http-host=0.0.0.0
+            - --http-port=3500
+            - --jwt-secret=/secrets/jwt.hex
+            - --accept-terms-of-use
+            - --suggested-fee-recipient=0x123463a4b065722e99115d6c222f267d9cabb524
+            - --minimum-peers-per-subnet=0
+            - --p2p-tcp-port=13000
+            - --p2p-udp-port=12000
+            - --p2p-static-id
+            - --disable-staking-contract-check
+            - --verbosity=info
+          ports:
+            - containerPort: 4000
+              name: grpc
+            - containerPort: 3500
+              name: http-api
+            - containerPort: 13000
+              name: p2p-tcp
+              protocol: TCP
+            - containerPort: 12000
+              name: p2p-udp
+              protocol: UDP
+          volumeMounts:
+            - name: beacon-data
+              mountPath: /data/beacon
+            - name: jwt
+              mountPath: /secrets
+              readOnly: true
+            - name: config
+              mountPath: /config
+              readOnly: true
+            - name: dynamic-config
+              mountPath: /dynamic-config
+              readOnly: true
+            - name: genesis-data
+              mountPath: /genesis-data
+              readOnly: true
+          livenessProbe:
+            tcpSocket:
+              port: grpc
+            initialDelaySeconds: 60
+            periodSeconds: 15
+            failureThreshold: 5
+          readinessProbe:
+            httpGet:
+              path: /eth/v1/node/health
+              port: http-api
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            failureThreshold: 5
+          resources:
+            requests:
+              memory: "1Gi"
+              cpu: "500m"
+            limits:
+              memory: "2Gi"
+              cpu: "1"
+      volumes:
+        - name: jwt
+          secret:
+            secretName: jwt-secret
+        - name: config
+          configMap:
+            name: prysm-config
+        - name: geth-genesis
+          configMap:
+            name: geth-genesis
+        - name: beacon-peers
+          configMap:
+            name: beacon-peers
+            optional: true
+        - name: dynamic-config
+          emptyDir: {}
+        - name: genesis-data
+          emptyDir: {}
+  volumeClaimTemplates:
+    - metadata:
+        name: beacon-data
+      spec:
+        storageClassName: standard
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 5Gi

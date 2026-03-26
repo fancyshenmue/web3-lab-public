@@ -1,0 +1,33 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: hydra-public
+  labels:
+    app: hydra
+    component: public-api
+spec:
+  type: ClusterIP
+  selector:
+    app: hydra
+  ports:
+    - name: public
+      port: 4444
+      targetPort: 4444
+      protocol: TCP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: hydra-admin
+  labels:
+    app: hydra
+    component: admin-api
+spec:
+  type: ClusterIP
+  selector:
+    app: hydra
+  ports:
+    - name: admin
+      port: 4445
+      targetPort: 4445
+      protocol: TCP

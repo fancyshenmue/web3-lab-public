@@ -1,0 +1,50 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: spicedb-grpc
+  labels:
+    app: spicedb
+    component: authorization
+spec:
+  type: ClusterIP
+  selector:
+    app: spicedb
+  ports:
+    - name: grpc
+      port: 50051
+      targetPort: 50051
+      protocol: TCP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: spicedb-http
+  labels:
+    app: spicedb
+    component: authorization
+spec:
+  type: ClusterIP
+  selector:
+    app: spicedb
+  ports:
+    - name: http
+      port: 8443
+      targetPort: 8443
+      protocol: TCP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: spicedb-metrics
+  labels:
+    app: spicedb
+    component: authorization
+spec:
+  type: ClusterIP
+  selector:
+    app: spicedb
+  ports:
+    - name: metrics
+      port: 9090
+      targetPort: 9090
+      protocol: TCP

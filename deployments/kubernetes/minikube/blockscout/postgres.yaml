@@ -1,0 +1,85 @@
+# Blockscout PostgreSQL — StatefulSet (1 replica)
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: blockscout-postgres
+  namespace: web3
+  labels:
+    app: blockscout-postgres
+spec:
+  serviceName: "blockscout-postgres-headless"
+  replicas: 1
+  selector:
+    matchLabels:
+      app: blockscout-postgres
+  template:
+    metadata:
+      labels:
+        app: blockscout-postgres
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:16-alpine
+          ports:
+            - containerPort: 5432
+              name: postgres
+          env:
+            - name: POSTGRES_DB
+              value: "blockscout"
+            - name: POSTGRES_USER
+              value: "blockscout"
+            - name: POSTGRES_PASSWORD
+              value: "blockscout"
+            - name: PGDATA
+              value: "/var/lib/postgresql/data/pgdata"
+          volumeMounts:
+            - name: blockscout-pg-data
+              mountPath: /var/lib/postgresql/data
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "250m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+  volumeClaimTemplates:
+    - metadata:
+        name: blockscout-pg-data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 5Gi
+---
+# Headless service for StatefulSet DNS
+apiVersion: v1
+kind: Service
+metadata:
+  name: blockscout-postgres-headless
+  namespace: web3
+  labels:
+    app: blockscout-postgres
+spec:
+  ports:
+    - port: 5432
+      name: postgres
+  clusterIP: None
+  selector:
+    app: blockscout-postgres
+---
+# ClusterIP service for Blockscout to connect
+apiVersion: v1
+kind: Service
+metadata:
+  name: blockscout-postgres
+  namespace: web3
+  labels:
+    app: blockscout-postgres
+spec:
+  type: ClusterIP
+  ports:
+    - port: 5432
+      targetPort: 5432
+      name: postgres
+  selector:
+    app: blockscout-postgres

@@ -1,0 +1,106 @@
+# Blockscout Backend — Deployment (Elixir/Phoenix API + Indexer)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: blockscout-backend
+  namespace: web3
+  labels:
+    app: blockscout-backend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: blockscout-backend
+  template:
+    metadata:
+      labels:
+        app: blockscout-backend
+    spec:
+      containers:
+        - name: backend
+          image: ghcr.io/blockscout/blockscout:8.1.1.commit.85934e52
+          command: ["sh", "-c"]
+          args:
+            - |
+              bin/blockscout eval "Elixir.Explorer.ReleaseTasks.create_and_migrate()" && \
+              bin/blockscout start
+          ports:
+            - containerPort: 4000
+              name: http
+          env:
+            - name: DATABASE_URL
+              value: "postgresql://blockscout:blockscout@blockscout-postgres:5432/blockscout"
+            - name: ETHEREUM_JSONRPC_VARIANT
+              value: "geth"
+            - name: ETHEREUM_JSONRPC_HTTP_URL
+              value: "http://geth-rpc:8545"
+            - name: ETHEREUM_JSONRPC_WS_URL
+              value: "ws://geth-rpc:8546"
+            - name: ETHEREUM_JSONRPC_TRACE_URL
+              value: "http://geth-rpc:8545"
+            - name: INDEXER_INTERNAL_TRANSACTIONS_TRACER_TYPE
+              value: "call_tracer"
+            - name: INDEXER_DISABLE_EMPTY_BLOCKS_SANITIZER
+              value: "true"
+            - name: CHAIN_ID
+              value: "72390"
+            - name: COIN
+              value: "labETH"
+            - name: NETWORK
+              value: "Web3 Lab"
+            - name: SUBNETWORK
+              value: "PoS Devnet"
+            - name: BLOCKSCOUT_HOST
+              value: "0.0.0.0"
+            - name: PORT
+              value: "4000"
+            - name: SECRET_KEY_BASE
+              value: "RMgI4C1Hxk3EI2RP8AW3LkdeGaqa/01ENHsLJEjOo1CXMXEE6k7e2bSfPNI5lcjp"
+            - name: ECTO_USE_SSL
+              value: "false"
+            - name: MIX_ENV
+              value: "prod"
+            - name: POOL_SIZE
+              value: "20"
+            - name: POOL_SIZE_API
+              value: "10"
+            - name: HEART_BEAT_TIMEOUT
+              value: "30"
+            - name: INDEXER_MEMORY_LIMIT
+              value: "1"
+            - name: FETCH_REWARDS_WAY
+              value: "manual"
+            - name: INDEXER_DISABLE_INTERNAL_TRANSACTIONS_FETCHER
+              value: "false"
+            - name: API_V2_ENABLED
+              value: "true"
+            - name: MARKET_COINGECKO_BASE_URL
+              value: "http://mock-price-api:4050"
+            - name: MARKET_COINGECKO_COIN_ID
+              value: "labeth"
+            - name: STATS_MICROSERVICE_URL
+              value: "http://blockscout-stats:8050"
+          resources:
+            requests:
+              memory: "1Gi"
+              cpu: "500m"
+            limits:
+              memory: "2Gi"
+              cpu: "1"
+---
+# ClusterIP service for Backend API
+apiVersion: v1
+kind: Service
+metadata:
+  name: blockscout-backend
+  namespace: web3
+  labels:
+    app: blockscout-backend
+spec:
+  type: ClusterIP
+  ports:
+    - port: 4000
+      targetPort: 4000
+      name: http
+  selector:
+    app: blockscout-backend

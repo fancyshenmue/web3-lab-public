@@ -1,0 +1,11 @@
+apiVersion: apisix.apache.org/v2
+kind: ApisixConsumer
+metadata:
+  name: admin-client
+  namespace: web3
+spec:
+  ingressClassName: apisix
+  authParameter:
+    keyAuth:
+      value:
+        key: "web3-admin-secret-key"

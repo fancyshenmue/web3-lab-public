@@ -1,0 +1,56 @@
+# Prysm Beacon Chain Config for local PoS devnet
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prysm-config
+  namespace: web3
+  labels:
+    app: prysm
+data:
+  config.yaml: |
+    # Minimal config for local devnet
+    PRESET_BASE: "mainnet"
+    CONFIG_NAME: "web3-lab-devnet"
+
+    # Genesis
+    MIN_GENESIS_ACTIVE_VALIDATOR_COUNT: 64
+    MIN_GENESIS_TIME: 0
+    GENESIS_FORK_VERSION: 0x20000089
+    GENESIS_DELAY: 0
+
+    # Altair
+    ALTAIR_FORK_VERSION: 0x20000090
+    ALTAIR_FORK_EPOCH: 0
+
+    # Bellatrix (Merge)
+    BELLATRIX_FORK_VERSION: 0x20000091
+    BELLATRIX_FORK_EPOCH: 0
+    TERMINAL_TOTAL_DIFFICULTY: 0
+
+    # Capella
+    CAPELLA_FORK_VERSION: 0x20000092
+    CAPELLA_FORK_EPOCH: 0
+
+    # Deneb
+    DENEB_FORK_VERSION: 0x20000093
+    DENEB_FORK_EPOCH: 0
+
+    # Electra
+    ELECTRA_FORK_VERSION: 0x20000094
+    ELECTRA_FORK_EPOCH: 18446744073709551615
+
+    # Time parameters
+    SECONDS_PER_SLOT: 4
+    SLOTS_PER_EPOCH: 32
+    SECONDS_PER_ETH1_BLOCK: 4
+    ETH1_FOLLOW_DISTANCE: 1
+
+    # Deposit contract
+    DEPOSIT_CHAIN_ID: 72390
+    DEPOSIT_NETWORK_ID: 72390
+    DEPOSIT_CONTRACT_ADDRESS: "0x0000000000000000000000000000000000000000"
+
+    # Network
+    MAX_COMMITTEES_PER_SLOT: 4
+    TARGET_COMMITTEE_SIZE: 4
+    TARGET_AGGREGATORS_PER_COMMITTEE: 16

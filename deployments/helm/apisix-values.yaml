@@ -1,0 +1,29 @@
+# APISIX Helm values for web3-lab Minikube
+# Adapted from gateway-lab's working installation
+gateway:
+  type: ClusterIP
+
+ingress-controller:
+  enabled: true
+  config:
+    apisix:
+      serviceNamespace: apisix
+
+apisix:
+  prometheus:
+    enabled: true
+
+etcd:
+  enabled: true
+  # Fix: use debian image for volumePermissions init container
+  # (default bitnami/os-shell image tag doesn't exist)
+  volumePermissions:
+    enabled: true
+    image:
+      repository: debian
+      tag: bookworm-slim
+      pullPolicy: IfNotPresent
+
+global:
+  security:
+    allowInsecureImages: true

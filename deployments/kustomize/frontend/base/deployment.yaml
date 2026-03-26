@@ -1,0 +1,34 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web3-frontend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: web3-frontend
+  template:
+    metadata:
+      labels:
+        app: web3-frontend
+    spec:
+      containers:
+        - name: frontend
+          image: web3-frontend:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 80
+          volumeMounts:
+            - name: config-volume
+              mountPath: /usr/share/nginx/html/config.json
+              subPath: config.json
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 5
+            periodSeconds: 10
+      volumes:
+        - name: config-volume
+          configMap:
+            name: web3-frontend-config

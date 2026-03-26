@@ -1,0 +1,43 @@
+# Dependencies — reinstalled in Docker
+**/node_modules
+.pixi
+
+# Build artifacts
+contracts/artifacts
+contracts/cache
+contracts/typechain-types
+contracts/coverage
+
+# Git
+.git
+.gitattributes
+.gitignore
+
+# IDE / tools
+.vscode
+.agent
+.claude
+.gemini
+
+# Seed images & data (uploaded via MinIO, not needed in Docker images)
+seed/images
+seed/metadata
+
+# Documentation / non-build files
+documents
+openspec
+scripts
+tmp
+pixi.toml
+pixi.lock
+Makefile
+README.md
+VERSION
+
+# Kubernetes manifests (not needed in app images)
+deployments
+
+# Test artifacts
+**/test-results
+contracts/seed-addresses.json
+contracts/deployments.json

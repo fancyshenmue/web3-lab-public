@@ -1,0 +1,53 @@
+@baseUrl = https://gateway.web3-local-dev.com/api/v1/admin
+@adminKey = web3-admin-secret-key
+
+### 1. List all App Clients
+GET {{baseUrl}}/clients
+X-Admin-Key: {{adminKey}}
+
+### 2. Create a new App Client
+# Upon success, copy the "id" from the response to use in the subsequent requests.
+POST {{baseUrl}}/clients
+X-Admin-Key: {{adminKey}}
+Content-Type: application/json
+
+{
+  "name": "Test Web3 App",
+  "frontend_url": "https://test.web3-local-dev.com",
+  "login_path": "/auth/callback",
+  "logout_url": "https://test.web3-local-dev.com/logout",
+  "allowed_cors_origins": [
+    "https://test.web3-local-dev.com",
+    "http://localhost:3000"
+  ]
+}
+
+### ---------------------------------------------------------
+# Set this to the UUID of the client created in step 2
+@clientId = REPLACE_WITH_CLIENT_UUID
+### ---------------------------------------------------------
+
+### 3. Get specific App Client
+GET {{baseUrl}}/clients/{{clientId}}
+X-Admin-Key: {{adminKey}}
+
+### 4. Update App Client
+PUT {{baseUrl}}/clients/{{clientId}}
+X-Admin-Key: {{adminKey}}
+Content-Type: application/json
+
+{
+  "name": "Test Web3 App Updated",
+  "frontend_url": "https://test.web3-local-dev.com",
+  "login_path": "/auth/callback/v2",
+  "logout_url": "https://test.web3-local-dev.com/logout",
+  "allowed_cors_origins": [
+    "https://test.web3-local-dev.com",
+    "https://app.web3-local-dev.com",
+    "http://localhost:3000"
+  ]
+}
+
+### 5. Delete App Client
+DELETE {{baseUrl}}/clients/{{clientId}}
+X-Admin-Key: {{adminKey}}

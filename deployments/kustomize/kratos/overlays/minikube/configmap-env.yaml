@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kratos-env
+  labels:
+    app: kratos
+    component: identity
+data:
+  DSN: "postgres://postgres:postgres@auth-postgres.web3.svc.cluster.local:5432/kratos?sslmode=disable"
+  SECRETS_COOKIE: "web3-lab-kratos-cookie-secret-not-for-production"
+  SECRETS_CIPHER: "web3-lab-kratos-cipher-secret-32"
+  SERVE_PUBLIC_BASE_URL: "https://gateway.web3-local-dev.com/identity"
+  SERVE_ADMIN_BASE_URL: "http://kratos-admin.web3.svc.cluster.local:4434"
+  SELFSERVICE_DEFAULT_BROWSER_RETURN_URL: "https://app.web3-local-dev.com"
+  SELFSERVICE_UI_BASE_URL: "https://app.web3-local-dev.com"
+  LOG_LEVEL: "debug"
+  LOG_LEAK_SENSITIVE_VALUES: "true"

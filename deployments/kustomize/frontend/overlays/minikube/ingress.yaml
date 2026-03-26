@@ -1,0 +1,23 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: web3-frontend-ingress
+  annotations:
+    cert-manager.io/cluster-issuer: local-ca-issuer
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - app.web3-local-dev.com
+      secretName: web3-frontend-tls
+  rules:
+    - host: app.web3-local-dev.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: web3-frontend
+                port:
+                  number: 80

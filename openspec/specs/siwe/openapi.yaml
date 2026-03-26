@@ -1,0 +1,558 @@
+openapi: 3.1.0
+info:
+  title: Wallet Authentication API (SIWE + EIP-712)
+  version: 1.0.0
+  description: |
+    Dual-protocol wallet authentication API supporting **EIP-4361 (SIWE)** and
+    **EIP-712 typed data signing**, integrated with Ory Kratos and Ory Hydra.
+
+    ## Protocols
+
+    | Protocol | Signing Method           | Message Format               |
+    | :------- | :----------------------- | :--------------------------- |
+    | `siwe`   | `personal_sign` (EIP-191)| EIP-4361 human-readable text |
+    | `eip712` | `eth_signTypedData_v4`   | EIP-712 structured JSON      |
+
+    ## Message Templates
+
+    Sign-in messages are managed via **Message Templates** stored in PostgreSQL
+    and cached in Redis. Each `app_client` references a template via FK.
+    Templates define the protocol, statement, domain, chain ID, and TTL.
+
+    Admin API provides CRUD for templates. Changes invalidate Redis cache.
+
+    ## Authentication Flow
+
+    ```
+    1. Frontend: Connect wallet (MetaMask plugin popup → approve)
+    2. Frontend: GET /api/v1/siwe/nonce?address=0x...&protocol=siwe
+    3. Backend:  Resolve template → generate message → store nonce in Redis
+    4. Frontend: Wallet signs message (personal_sign or eth_signTypedData_v4)
+    5. Frontend: POST /api/v1/siwe/verify   (standalone)
+                 POST /api/v1/siwe/authenticate (OAuth2 integrated)
+    6. Backend:  Verify sig → find/create identity → issue session → respond
+    ```
+
+servers:
+  - url: https://gateway.web3-local-dev.com
+    description: APISIX gateway (local dev)
+  - url: https://api.web3-local-dev.com
+    description: Backend API direct (legacy)
+
+tags:
+  - name: SIWE
+    description: Wallet authentication (challenge / verify / authenticate)
+  - name: Message Templates
+    description: Admin CRUD for sign-in message templates
+
+paths:
+  # ─────────────────────────────────────────────
+  # Wallet Authentication
+  # ─────────────────────────────────────────────
+
+  /api/v1/siwe/nonce:
+    get:
+      operationId: getSiweNonce
+      tags: [SIWE]
+      summary: Generate nonce + sign-in message
+      description: |
+        Generates a cryptographically random nonce, stores it in Redis
+        (TTL from the resolved message template), and returns a pre-formatted
+        message ready for wallet signing.
+
+        The message format depends on `protocol`:
+        - `siwe` → EIP-4361 human-readable text for `personal_sign`
+        - `eip712` → EIP-712 typed data JSON for `eth_signTypedData_v4`
+
+        If `client_id` is provided, the message template is resolved from the
+        app_client's linked template. Otherwise the default template is used.
+      parameters:
+        - name: address
+          in: query
+          required: true
+          description: EIP-55 checksummed Ethereum address.
+          schema:
+            type: string
+            pattern: "^0x[0-9a-fA-F]{40}$"
+            example: "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045"
+        - name: protocol
+          in: query
+          required: false
+          description: Signing protocol. Defaults to `siwe`.
+          schema:
+            type: string
+            enum: [siwe, eip712]
+            default: siwe
+        - name: client_id
+          in: query
+          required: false
+          description: |
+            App client ID to resolve the message template.
+            If omitted, the default template is used.
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Challenge generated.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NonceResponse"
+        "400":
+          description: Invalid address or unsupported protocol.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Client ID not found or no template configured.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Internal error.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/siwe/verify:
+    post:
+      operationId: verifySiweSignature
+      tags: [SIWE]
+      summary: Verify wallet signature (standalone)
+      description: |
+        Verifies the wallet signature, consumes the nonce, finds or creates
+        a Kratos identity, and returns a Kratos session token.
+
+        Does **not** interact with Hydra. Use `/authenticate` for OAuth2 flows.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/VerifyRequest"
+      responses:
+        "200":
+          description: Signature valid; session issued.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VerifyResponse"
+        "400":
+          description: Invalid request body.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Signature verification failed or nonce expired.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Internal error.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/siwe/authenticate:
+    post:
+      operationId: authenticateWithSiwe
+      tags: [SIWE]
+      summary: Verify wallet signature + complete OAuth2 flow
+      description: |
+        Same verification as `/verify`, then integrates with Hydra:
+        1. Verify signature → consume nonce
+        2. Find or create Kratos identity + account
+        3. Create Kratos session
+        4. Accept Hydra login challenge (subject = identity_id)
+        5. Auto-accept Hydra consent
+        6. Return `redirect_to` for frontend to complete code exchange
+
+        Frontend should `window.location.href = redirect_to` after receiving
+        the response.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AuthenticateRequest"
+      responses:
+        "200":
+          description: Authentication successful; redirect URL provided.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthenticateResponse"
+        "400":
+          description: Invalid request or missing login_challenge.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Signature verification failed.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Internal error.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  # ─────────────────────────────────────────────
+  # Message Template Admin CRUD
+  # ─────────────────────────────────────────────
+
+  /api/v1/admin/message-templates:
+    get:
+      operationId: listMessageTemplates
+      tags: [Message Templates]
+      summary: List all message templates
+      responses:
+        "200":
+          description: List of templates.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  templates:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/MessageTemplate"
+    post:
+      operationId: createMessageTemplate
+      tags: [Message Templates]
+      summary: Create a message template
+      description: |
+        Creates a new sign-in message template. The `name` must be unique.
+        A template with `name = "default"` serves as the fallback template.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateMessageTemplateRequest"
+      responses:
+        "201":
+          description: Template created.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageTemplate"
+        "400":
+          description: Invalid request / duplicate name.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Internal error.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/admin/message-templates/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      operationId: getMessageTemplate
+      tags: [Message Templates]
+      summary: Get a message template by ID
+      responses:
+        "200":
+          description: Template found.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageTemplate"
+        "404":
+          description: Not found.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    put:
+      operationId: updateMessageTemplate
+      tags: [Message Templates]
+      summary: Update a message template
+      description: Invalidates Redis cache for this template and all linked clients.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateMessageTemplateRequest"
+      responses:
+        "200":
+          description: Template updated.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageTemplate"
+        "400":
+          description: Invalid request.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Not found.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      operationId: deleteMessageTemplate
+      tags: [Message Templates]
+      summary: Delete a message template
+      description: |
+        Cannot delete a template that is still referenced by app_clients.
+        Unlink clients first.
+      responses:
+        "204":
+          description: Deleted.
+        "404":
+          description: Not found.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Template still referenced by app_clients.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+components:
+  schemas:
+    # ─────────────────────────────────────────────
+    # Wallet Auth: Requests & Responses
+    # ─────────────────────────────────────────────
+
+    NonceResponse:
+      type: object
+      required: [nonce, message, protocol, expires_at]
+      properties:
+        nonce:
+          type: string
+          description: 32-byte hex-encoded random nonce.
+          example: "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6a7b8c9d0e1f2a3b4c5d6a7b8c9d0e1f2"
+        message:
+          type: string
+          description: |
+            Pre-formatted message for signing.
+            - `siwe` protocol: EIP-4361 plain text for `personal_sign`
+            - `eip712` protocol: JSON string for `eth_signTypedData_v4`
+        protocol:
+          type: string
+          enum: [siwe, eip712]
+          description: The protocol used to generate this message.
+        expires_at:
+          type: string
+          format: date-time
+          description: Nonce expiration time (ISO 8601).
+        domain:
+          type: string
+          example: "web3-local-dev.com"
+        chain_id:
+          type: integer
+          example: 1
+
+    VerifyRequest:
+      type: object
+      required: [message, signature, protocol]
+      properties:
+        message:
+          type: string
+          description: The exact message that was signed (must match byte-for-byte).
+        signature:
+          type: string
+          description: Hex-encoded signature (`0x`-prefixed, 65 bytes).
+          pattern: "^0x[0-9a-fA-F]{130}$"
+        protocol:
+          type: string
+          enum: [siwe, eip712]
+          description: Protocol used for signing.
+
+    VerifyResponse:
+      type: object
+      required: [account_id, session_token, is_new]
+      properties:
+        account_id:
+          type: string
+          format: uuid
+        session_token:
+          type: string
+          description: Kratos session token.
+        is_new:
+          type: boolean
+          description: True if a new identity/account was created.
+
+    AuthenticateRequest:
+      type: object
+      required: [message, signature, protocol, login_challenge]
+      properties:
+        message:
+          type: string
+        signature:
+          type: string
+          pattern: "^0x[0-9a-fA-F]{130}$"
+        protocol:
+          type: string
+          enum: [siwe, eip712]
+        login_challenge:
+          type: string
+          description: Hydra login challenge from the OAuth2 redirect.
+
+    AuthenticateResponse:
+      type: object
+      required: [redirect_to, is_new_user]
+      properties:
+        redirect_to:
+          type: string
+          format: uri
+          description: Hydra redirect URL to complete OAuth2 flow.
+        account_id:
+          type: string
+          format: uuid
+        identity_id:
+          type: string
+          format: uuid
+        is_new_user:
+          type: boolean
+
+    # ─────────────────────────────────────────────
+    # Message Templates
+    # ─────────────────────────────────────────────
+
+    MessageTemplate:
+      type: object
+      required: [id, name, protocol, statement, domain, uri, chain_id, version, nonce_ttl_secs]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          description: Unique template name (e.g. "default", "nms", "rewards").
+          example: "default"
+        protocol:
+          type: string
+          enum: [siwe, eip712]
+          description: Signing protocol this template generates messages for.
+        statement:
+          type: string
+          description: |
+            Human-readable statement. Supports `{service_name}` variable
+            substitution (resolved from app_client.client_name).
+          example: "Sign in to {service_name}"
+        domain:
+          type: string
+          description: Domain in the SIWE message or EIP-712 domain separator.
+          example: "web3-local-dev.com"
+        uri:
+          type: string
+          description: URI in the SIWE message.
+          example: "https://app.web3-local-dev.com"
+        chain_id:
+          type: integer
+          description: EIP-155 chain ID.
+          example: 1
+        version:
+          type: string
+          description: SIWE version (always "1") or EIP-712 domain version.
+          example: "1"
+        nonce_ttl_secs:
+          type: integer
+          description: Nonce TTL in seconds.
+          example: 300
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    CreateMessageTemplateRequest:
+      type: object
+      required: [name, protocol, statement, domain, uri, chain_id]
+      properties:
+        name:
+          type: string
+          example: "default"
+        protocol:
+          type: string
+          enum: [siwe, eip712]
+        statement:
+          type: string
+          example: "Sign in to {service_name}"
+        domain:
+          type: string
+          example: "web3-local-dev.com"
+        uri:
+          type: string
+          example: "https://app.web3-local-dev.com"
+        chain_id:
+          type: integer
+          default: 1
+        version:
+          type: string
+          default: "1"
+        nonce_ttl_secs:
+          type: integer
+          default: 300
+
+    UpdateMessageTemplateRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        statement:
+          type: string
+        domain:
+          type: string
+        uri:
+          type: string
+        chain_id:
+          type: integer
+        version:
+          type: string
+        nonce_ttl_secs:
+          type: integer
+
+    # ─────────────────────────────────────────────
+    # Common
+    # ─────────────────────────────────────────────
+
+    ErrorResponse:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: string
+          enum:
+            - INVALID_REQUEST
+            - INVALID_SIGNATURE
+            - NONCE_EXPIRED
+            - NOT_FOUND
+            - CONFLICT
+            - INTERNAL_ERROR
+        message:
+          type: string

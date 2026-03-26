@@ -1,0 +1,36 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: oathkeeper-ingress
+  namespace: web3
+  annotations:
+    cert-manager.io/cluster-issuer: "local-ca-issuer"
+    nginx.ingress.kubernetes.io/proxy-buffer-size: "16k"
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - auth.web3-local-dev.com
+        - auth-api.web3-local-dev.com
+      secretName: oathkeeper-tls
+  rules:
+    - host: auth.web3-local-dev.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: oathkeeper-proxy
+                port:
+                  number: 4455
+    - host: auth-api.web3-local-dev.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: oathkeeper-api
+                port:
+                  number: 4456

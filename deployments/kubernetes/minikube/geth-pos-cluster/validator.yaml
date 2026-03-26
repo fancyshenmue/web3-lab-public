@@ -1,0 +1,121 @@
+# Validator — StatefulSet (3 replicas, production-like)
+# Each validator-N manages a shard of the 64 interop keys and connects to paired beacon-N
+# Init container generates ordinal-specific config.yaml, Prysm reads it via --config-file
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: validator
+  namespace: web3
+  labels:
+    app: validator
+    layer: validator
+spec:
+  serviceName: "validator-headless"
+  replicas: 3
+  selector:
+    matchLabels:
+      app: validator
+  template:
+    metadata:
+      labels:
+        app: validator
+        layer: validator
+    spec:
+      initContainers:
+        - name: init-config
+          image: busybox:1.36
+          command: ["sh", "-c"]
+          args:
+            - |
+              ORDINAL=${HOSTNAME##*-}
+
+              # Split 64 interop keys across 3 validators
+              case $ORDINAL in
+                0) START=0;  COUNT=22 ;;
+                1) START=22; COUNT=22 ;;
+                2) START=44; COUNT=20 ;;
+              esac
+
+              cat > /dynamic-config/config.yaml << EOF
+              interop-num-validators: ${COUNT}
+              interop-start-index: ${START}
+              beacon-rpc-provider: "beacon-${ORDINAL}.beacon-headless:4000"
+              EOF
+              echo "✅ Generated config for validator-${ORDINAL} (keys ${START}-$((START+COUNT-1)))"
+              cat /dynamic-config/config.yaml
+          volumeMounts:
+            - name: dynamic-config
+              mountPath: /dynamic-config
+      containers:
+        - name: validator
+          image: gcr.io/prysmaticlabs/prysm/validator:v5.1.2
+          args:
+            - --datadir=/data/validator
+            - --accept-terms-of-use
+            - --config-file=/dynamic-config/config.yaml
+            - --chain-config-file=/config/config.yaml
+            - --suggested-fee-recipient=0x123463a4b065722e99115d6c222f267d9cabb524
+            - --verbosity=info
+            - --monitoring-host=0.0.0.0
+            - --monitoring-port=8081
+          ports:
+            - containerPort: 8081
+              name: monitoring
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: monitoring
+            initialDelaySeconds: 30
+            periodSeconds: 15
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: monitoring
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            failureThreshold: 3
+          volumeMounts:
+            - name: validator-data
+              mountPath: /data/validator
+            - name: config
+              mountPath: /config
+              readOnly: true
+            - name: dynamic-config
+              mountPath: /dynamic-config
+              readOnly: true
+          resources:
+            requests:
+              memory: "512Mi"
+              cpu: "250m"
+            limits:
+              memory: "1Gi"
+              cpu: "500m"
+      volumes:
+        - name: config
+          configMap:
+            name: prysm-config
+        - name: dynamic-config
+          emptyDir: {}
+  volumeClaimTemplates:
+    - metadata:
+        name: validator-data
+      spec:
+        storageClassName: standard
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 1Gi
+---
+# Headless service for Validator StatefulSet DNS
+apiVersion: v1
+kind: Service
+metadata:
+  name: validator-headless
+  namespace: web3
+  labels:
+    app: validator
+spec:
+  clusterIP: None
+  selector:
+    app: validator

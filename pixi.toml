@@ -1,0 +1,15 @@
+[workspace]
+authors = ["Charles Hsu <fancyshenmue.work@gmail.com>"]
+channels = ["conda-forge"]
+name = "web3-lab"
+platforms = ["osx-arm64"]
+version = "0.1.0"
+
+[tasks]
+install-migrate = { cmd = "CGO_ENABLED=0 go install -tags 'postgres' github.com/golang-migrate/migrate/v4/cmd/migrate@v4.18.3", description = "Install golang-migrate CLI" }
+install-sqlc = { cmd = "CGO_ENABLED=0 go install github.com/sqlc-dev/sqlc/cmd/sqlc@v1.30.0", description = "Install sqlc CLI" }
+install-go-tools = { depends-on = ["install-migrate", "install-sqlc"], description = "Install all Go CLI tools (migrate, sqlc)" }
+
+[dependencies]
+nodejs = "22.*"
+go = ">=1.26.1,<2"

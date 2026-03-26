@@ -1,0 +1,5 @@
+{
+  "gatewayUrl": "https://gateway.web3-local-dev.com",
+  "clientId": "web3-test-app",
+  "authDomain": "app.web3-local-dev.com"
+}

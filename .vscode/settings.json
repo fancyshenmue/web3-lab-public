@@ -1,0 +1,14 @@
+{
+    "go.goroot": "${workspaceFolder}/.pixi/envs/default/go",
+    "go.alternateTools": {
+        "go": "${workspaceFolder}/.pixi/envs/default/bin/go"
+    },
+    "go.gopath": "${env:HOME}/go",
+    "go.toolsEnvVars": {
+        "PATH": "${workspaceFolder}/.pixi/envs/default/bin:${env:PATH}"
+    },
+    "go.useLanguageServer": true,
+    "gopls": {
+        "formatting.local": "github.com/web3-lab/backend"
+    }
+}

@@ -1,0 +1,12 @@
+{
+  "name": "web3-lab",
+  "private": true,
+  "workspaces": [
+    "contracts",
+    "frontend/*",
+    "scripts"
+  ],
+  "dependencies": {
+    "ethers": "^6.16.0"
+  }
+}

@@ -1,0 +1,67 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: oathkeeper-config
+  labels:
+    app: oathkeeper
+    component: api-gateway
+data:
+  oathkeeper.yml: |
+    serve:
+      proxy:
+        port: 4455
+      api:
+        port: 4456
+
+    access_rules:
+      matching_strategy: glob
+      repositories:
+        - file:///etc/config/oathkeeper/rules.json
+
+    errors:
+      fallback:
+        - json
+      handlers:
+        json:
+          enabled: true
+            
+    mutators:
+      noop:
+        enabled: true
+      id_token:
+        enabled: true
+        config:
+          issuer_url: env://OATHKEEPER_ISSUER_URL
+          jwks_url: env://OATHKEEPER_JWKS_URL
+
+    authorizers:
+      allow:
+        enabled: true
+      deny:
+        enabled: true
+
+    authenticators:
+      noop:
+        enabled: true
+      anonymous:
+        enabled: true
+        config:
+          subject: guest
+
+    log:
+      level: debug
+      format: json
+
+  rules.json: |
+    [
+      {
+        "id": "allow-anonymous",
+        "match": {
+          "url": "http://<match-all>",
+          "methods": ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS", "HEAD"]
+        },
+        "authenticators": [{"handler": "anonymous"}],
+        "authorizer": {"handler": "allow"},
+        "mutators": [{"handler": "noop"}]
+      }
+    ]

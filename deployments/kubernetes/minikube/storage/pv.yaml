@@ -1,0 +1,506 @@
+# =============================================================================
+# Geth (Execution Layer) PVs — 3 nodes
+# =============================================================================
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: geth-pv-0
+  labels:
+    type: local
+spec:
+  storageClassName: standard
+  capacity:
+    storage: 5Gi
+  accessModes:
+    - ReadWriteOnce
+  hostPath:
+    path: "/data/geth/data0"
+    type: DirectoryOrCreate
+  claimRef:
+    namespace: web3
+    name: geth-data-geth-0
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+        - matchExpressions:
+            - key: kubernetes.io/hostname
+              operator: In
+              values:
+                - web3-lab
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: geth-pv-1
+  labels:
+    type: local
+spec:
+  storageClassName: standard
+  capacity:
+    storage: 5Gi
+  accessModes:
+    - ReadWriteOnce
+  hostPath:
+    path: "/data/geth/data1"
+    type: DirectoryOrCreate
+  claimRef:
+    namespace: web3
+    name: geth-data-geth-1
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+        - matchExpressions:
+            - key: kubernetes.io/hostname
+              operator: In
+              values:
+                - web3-lab-m02
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: geth-pv-2
+  labels:
+    type: local
+spec:
+  storageClassName: standard
+  capacity:
+    storage: 5Gi
+  accessModes:
+    - ReadWriteOnce
+  hostPath:
+    path: "/data/geth/data2"
+    type: DirectoryOrCreate
+  claimRef:
+    namespace: web3
+    name: geth-data-geth-2
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+        - matchExpressions:
+            - key: kubernetes.io/hostname
+              operator: In
+              values:
+                - web3-lab-m03
+---
+# =============================================================================
+# Beacon Node (Consensus Layer) PVs — 3 nodes
+# =============================================================================
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: beacon-pv-0
+  labels:
+    type: local
+spec:
+  storageClassName: standard
+  capacity:
+    storage: 5Gi
+  accessModes:
+    - ReadWriteOnce
+  hostPath:
+    path: "/data/beacon/data0"
+    type: DirectoryOrCreate
+  claimRef:
+    namespace: web3
+    name: beacon-data-beacon-0
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+        - matchExpressions:
+            - key: kubernetes.io/hostname
+              operator: In
+              values:
+                - web3-lab
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: beacon-pv-1
+  labels:
+    type: local
+spec:
+  storageClassName: standard
+  capacity:
+    storage: 5Gi
+  accessModes:
+    - ReadWriteOnce
+  hostPath:
+    path: "/data/beacon/data1"
+    type: DirectoryOrCreate
+  claimRef:
+    namespace: web3
+    name: beacon-data-beacon-1
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+        - matchExpressions:
+            - key: kubernetes.io/hostname
+              operator: In
+              values:
+                - web3-lab-m02
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: beacon-pv-2
+  labels:
+    type: local
+spec:
+  storageClassName: standard
+  capacity:
+    storage: 5Gi
+  accessModes:
+    - ReadWriteOnce
+  hostPath:
+    path: "/data/beacon/data2"
+    type: DirectoryOrCreate
+  claimRef:
+    namespace: web3
+    name: beacon-data-beacon-2
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+        - matchExpressions:
+            - key: kubernetes.io/hostname
+              operator: In
+              values:
+                - web3-lab-m03
+---
+# =============================================================================
+# Validator PVs — 3 nodes (colocated with beacon nodes)
+# =============================================================================
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: validator-pv-0
+  labels:
+    type: local
+spec:
+  storageClassName: standard
+  capacity:
+    storage: 1Gi
+  accessModes:
+    - ReadWriteOnce
+  hostPath:
+    path: "/data/validator/data0"
+    type: DirectoryOrCreate
+  claimRef:
+    namespace: web3
+    name: validator-data-validator-0
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+        - matchExpressions:
+            - key: kubernetes.io/hostname
+              operator: In
+              values:
+                - web3-lab
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: validator-pv-1
+  labels:
+    type: local
+spec:
+  storageClassName: standard
+  capacity:
+    storage: 1Gi
+  accessModes:
+    - ReadWriteOnce
+  hostPath:
+    path: "/data/validator/data1"
+    type: DirectoryOrCreate
+  claimRef:
+    namespace: web3
+    name: validator-data-validator-1
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+        - matchExpressions:
+            - key: kubernetes.io/hostname
+              operator: In
+              values:
+                - web3-lab-m02
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: validator-pv-2
+  labels:
+    type: local
+spec:
+  storageClassName: standard
+  capacity:
+    storage: 1Gi
+  accessModes:
+    - ReadWriteOnce
+  hostPath:
+    path: "/data/validator/data2"
+    type: DirectoryOrCreate
+  claimRef:
+    namespace: web3
+    name: validator-data-validator-2
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+        - matchExpressions:
+            - key: kubernetes.io/hostname
+              operator: In
+              values:
+                - web3-lab-m03
+---
+# =============================================================================
+# Blockscout Postgres PV
+# =============================================================================
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: blockscout-postgres-pv-0
+  labels:
+    type: local
+spec:
+  storageClassName: standard
+  capacity:
+    storage: 5Gi
+  accessModes:
+    - ReadWriteOnce
+  hostPath:
+    path: "/data/blockscout/postgres/data0"
+    type: DirectoryOrCreate
+  claimRef:
+    namespace: web3
+    name: blockscout-pg-data-blockscout-postgres-0
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+        - matchExpressions:
+            - key: kubernetes.io/hostname
+              operator: In
+              values:
+                - web3-lab
+---
+# =============================================================================
+# Auth PostgreSQL PV (shared DB for Hydra, Kratos, SpiceDB, API)
+# =============================================================================
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: auth-postgres-pv-0
+  labels:
+    type: local
+spec:
+  storageClassName: standard
+  capacity:
+    storage: 1Gi
+  accessModes:
+    - ReadWriteOnce
+  hostPath:
+    path: "/data/auth/postgres/data0"
+    type: DirectoryOrCreate
+  claimRef:
+    namespace: web3
+    name: postgres-data-auth-postgres-0
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+        - matchExpressions:
+            - key: kubernetes.io/hostname
+              operator: In
+              values:
+                - web3-lab
+---
+# =============================================================================
+# Auth Redis PV (nonce storage for wallet auth)
+# =============================================================================
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: redis-pv-0
+  labels:
+    type: local
+spec:
+  storageClassName: standard
+  capacity:
+    storage: 1Gi
+  accessModes:
+    - ReadWriteOnce
+  hostPath:
+    path: "/data/auth/redis/data0"
+    type: DirectoryOrCreate
+  claimRef:
+    namespace: web3
+    name: redis-data-redis-0
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+        - matchExpressions:
+            - key: kubernetes.io/hostname
+              operator: In
+              values:
+                - web3-lab
+---
+# =============================================================================
+# MinIO Distributed Object Storage PVs — 6 Disks across 3 nodes
+# =============================================================================
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: minio-pv-0
+  labels:
+    type: local
+spec:
+  storageClassName: standard
+  capacity:
+    storage: 10Gi
+  accessModes:
+    - ReadWriteOnce
+  hostPath:
+    path: "/data/minio/distributed/data0"
+    type: DirectoryOrCreate
+  claimRef:
+    namespace: web3
+    name: data-minio-0
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+        - matchExpressions:
+            - key: kubernetes.io/hostname
+              operator: In
+              values:
+                - web3-lab
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: minio-pv-1
+  labels:
+    type: local
+spec:
+  storageClassName: standard
+  capacity:
+    storage: 10Gi
+  accessModes:
+    - ReadWriteOnce
+  hostPath:
+    path: "/data/minio/distributed/data1"
+    type: DirectoryOrCreate
+  claimRef:
+    namespace: web3
+    name: data-minio-1
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+        - matchExpressions:
+            - key: kubernetes.io/hostname
+              operator: In
+              values:
+                - web3-lab-m02
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: minio-pv-2
+  labels:
+    type: local
+spec:
+  storageClassName: standard
+  capacity:
+    storage: 10Gi
+  accessModes:
+    - ReadWriteOnce
+  hostPath:
+    path: "/data/minio/distributed/data2"
+    type: DirectoryOrCreate
+  claimRef:
+    namespace: web3
+    name: data-minio-2
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+        - matchExpressions:
+            - key: kubernetes.io/hostname
+              operator: In
+              values:
+                - web3-lab-m03
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: minio-pv-3
+  labels:
+    type: local
+spec:
+  storageClassName: standard
+  capacity:
+    storage: 10Gi
+  accessModes:
+    - ReadWriteOnce
+  hostPath:
+    path: "/data/minio/distributed/data3"
+    type: DirectoryOrCreate
+  claimRef:
+    namespace: web3
+    name: data-minio-3
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+        - matchExpressions:
+            - key: kubernetes.io/hostname
+              operator: In
+              values:
+                - web3-lab
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: minio-pv-4
+  labels:
+    type: local
+spec:
+  storageClassName: standard
+  capacity:
+    storage: 10Gi
+  accessModes:
+    - ReadWriteOnce
+  hostPath:
+    path: "/data/minio/distributed/data4"
+    type: DirectoryOrCreate
+  claimRef:
+    namespace: web3
+    name: data-minio-4
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+        - matchExpressions:
+            - key: kubernetes.io/hostname
+              operator: In
+              values:
+                - web3-lab-m02
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: minio-pv-5
+  labels:
+    type: local
+spec:
+  storageClassName: standard
+  capacity:
+    storage: 10Gi
+  accessModes:
+    - ReadWriteOnce
+  hostPath:
+    path: "/data/minio/distributed/data5"
+    type: DirectoryOrCreate
+  claimRef:
+    namespace: web3
+    name: data-minio-5
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+        - matchExpressions:
+            - key: kubernetes.io/hostname
+              operator: In
+              values:
+                - web3-lab-m03

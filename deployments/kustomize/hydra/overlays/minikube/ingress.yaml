@@ -1,0 +1,36 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: hydra-ingress
+  namespace: web3
+  annotations:
+    cert-manager.io/cluster-issuer: "local-ca-issuer"
+    nginx.ingress.kubernetes.io/proxy-buffer-size: "16k"
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - hydra.web3-local-dev.com
+        - hydra-admin.web3-local-dev.com
+      secretName: hydra-tls
+  rules:
+    - host: hydra.web3-local-dev.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: hydra-public
+                port:
+                  number: 4444
+    - host: hydra-admin.web3-local-dev.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: hydra-admin
+                port:
+                  number: 4445

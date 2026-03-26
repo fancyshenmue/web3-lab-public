@@ -1,0 +1,62 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web3-api
+  labels:
+    app: web3-api
+    component: backend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: web3-api
+  template:
+    metadata:
+      labels:
+        app: web3-api
+        component: backend
+    spec:
+      containers:
+        - name: web3-api
+          image: web3-account-api:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: web3-api-env
+          volumeMounts:
+            - name: api-config-volume
+              mountPath: /etc/config/api
+              readOnly: true
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: http
+              scheme: HTTP
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: http
+              scheme: HTTP
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+      volumes:
+        - name: api-config-volume
+          configMap:
+            name: web3-api-config

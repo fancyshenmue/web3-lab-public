@@ -1,0 +1,103 @@
+apiVersion: apisix.apache.org/v2
+kind: ApisixRoute
+metadata:
+  name: auth-gateway-admin
+  namespace: web3
+spec:
+  ingressClassName: apisix
+  http:
+    # --- Kratos Admin ---
+    - name: kratos-admin
+      match:
+        hosts:
+          - gateway.web3-local-dev.com
+        paths:
+          - /admin/identity/*
+      plugins:
+        - name: proxy-rewrite
+          enable: true
+          config:
+            regex_uri: ["^/admin/identity/(.*)", "/$1"]
+        - name: key-auth
+          enable: true
+          config:
+            header: X-Admin-Key
+      backends:
+        - serviceName: kratos-admin
+          servicePort: 4434
+
+    # --- Hydra Admin ---
+    - name: hydra-admin
+      match:
+        hosts:
+          - gateway.web3-local-dev.com
+        paths:
+          - /admin/oauth2/*
+      plugins:
+        - name: proxy-rewrite
+          enable: true
+          config:
+            regex_uri: ["^/admin/oauth2/(.*)", "/$1"]
+        - name: key-auth
+          enable: true
+          config:
+            header: X-Admin-Key
+      backends:
+        - serviceName: hydra-admin
+          servicePort: 4445
+
+    # --- Oathkeeper API ---
+    - name: oathkeeper-api
+      match:
+        hosts:
+          - gateway.web3-local-dev.com
+        paths:
+          - /admin/auth/*
+      plugins:
+        - name: proxy-rewrite
+          enable: true
+          config:
+            regex_uri: ["^/admin/auth/(.*)", "/$1"]
+        - name: key-auth
+          enable: true
+          config:
+            header: X-Admin-Key
+      backends:
+        - serviceName: oathkeeper-api
+          servicePort: 4456
+
+    # --- SpiceDB HTTP ---
+    - name: spicedb-http
+      match:
+        hosts:
+          - gateway.web3-local-dev.com
+        paths:
+          - /admin/authz/*
+      plugins:
+        - name: proxy-rewrite
+          enable: true
+          config:
+            regex_uri: ["^/admin/authz/(.*)", "/$1"]
+        - name: key-auth
+          enable: true
+          config:
+            header: X-Admin-Key
+      backends:
+        - serviceName: spicedb-http
+          servicePort: 8443
+
+    # --- Web3 API Admin ---
+    - name: web3-api-admin
+      match:
+        hosts:
+          - gateway.web3-local-dev.com
+        paths:
+          - /api/v1/admin/*
+      plugins:
+        - name: key-auth
+          enable: true
+          config:
+            header: X-Admin-Key
+      backends:
+        - serviceName: web3-api
+          servicePort: 8080

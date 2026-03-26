@@ -1,0 +1,23 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: auth-postgres-init
+  labels:
+    app: auth-postgres
+    component: database
+data:
+  init-databases.sh: |
+    #!/bin/bash
+    set -e
+
+    echo "Creating auth databases..."
+
+    for db in hydra kratos spicedb account; do
+      echo "  Creating database: $db"
+      psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" <<-EOSQL
+        SELECT 'CREATE DATABASE $db' WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = '$db')\gexec
+        GRANT ALL PRIVILEGES ON DATABASE $db TO $POSTGRES_USER;
+    EOSQL
+    done
+
+    echo "All auth databases created successfully."

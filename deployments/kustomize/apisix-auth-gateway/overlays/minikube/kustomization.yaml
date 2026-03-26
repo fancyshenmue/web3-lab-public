@@ -1,0 +1,7 @@
+resources:
+  - ../../base
+
+# Only ApisixRoute and ApisixConsumer go to web3 namespace
+# Ingress and Certificate are applied separately to apisix namespace
+# (see Makefile deploy-apisix-auth-gateway target)
+namespace: web3

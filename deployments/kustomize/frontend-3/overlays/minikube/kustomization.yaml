@@ -1,0 +1,11 @@
+namespace: web3
+resources:
+- ../../base
+- configmap-config.yaml
+- ingress.yaml
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+images:
+- name: web3-frontend-3
+  newName: web3-frontend-3
+  newTag: 20260326_v0_0_74

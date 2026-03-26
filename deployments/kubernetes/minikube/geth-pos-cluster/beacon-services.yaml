@@ -1,0 +1,43 @@
+# Beacon Services
+# Headless service for StatefulSet DNS (beacon-0.beacon-headless, etc.)
+apiVersion: v1
+kind: Service
+metadata:
+  name: beacon-headless
+  namespace: web3
+  labels:
+    app: beacon
+spec:
+  ports:
+    - port: 4000
+      name: grpc
+    - port: 3500
+      name: http-api
+    - port: 13000
+      name: p2p-tcp
+    - port: 12000
+      name: p2p-udp
+      protocol: UDP
+  clusterIP: None
+  selector:
+    app: beacon
+---
+# ClusterIP service for Beacon API access
+apiVersion: v1
+kind: Service
+metadata:
+  name: beacon-api
+  namespace: web3
+  labels:
+    app: beacon
+spec:
+  type: ClusterIP
+  ports:
+    - port: 4000
+      targetPort: 4000
+      name: grpc
+    - port: 3500
+      targetPort: 3500
+      name: http-api
+  selector:
+    app: beacon

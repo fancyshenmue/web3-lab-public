@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: spicedb-env
+  labels:
+    app: spicedb
+    component: authorization
+data:
+  SPICEDB_GRPC_PRESHARED_KEY: "web3-lab-spicedb-key-not-for-production"
+  SPICEDB_DATASTORE_CONN_URI: "postgres://postgres:postgres@auth-postgres.web3.svc.cluster.local:5432/spicedb?sslmode=disable"
+  SPICEDB_DATASTORE_CONN_MAX_OPEN: "5"
+  SPICEDB_DATASTORE_CONN_MAX_IDLE: "5"
+  SPICEDB_DATASTORE_CONN_MAX_LIFETIME: "5m"
+  SPICEDB_DATASTORE_GC_WINDOW: "5m"
+  SPICEDB_LOG_LEVEL: "debug"
+  SPICEDB_DATASTORE_ENGINE: "postgres"
+  SPICEDB_HTTP_ENABLED: "true"

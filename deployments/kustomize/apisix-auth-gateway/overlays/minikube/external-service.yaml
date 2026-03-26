@@ -1,0 +1,13 @@
+# ExternalName service to bridge NGINX Ingress (web3 namespace)
+# to APISIX Gateway (apisix namespace)
+apiVersion: v1
+kind: Service
+metadata:
+  name: apisix-gateway
+  namespace: web3
+spec:
+  type: ExternalName
+  externalName: apisix-gateway.apisix.svc.cluster.local
+  ports:
+    - port: 9080
+      targetPort: 9080

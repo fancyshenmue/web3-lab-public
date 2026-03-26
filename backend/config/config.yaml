@@ -1,0 +1,39 @@
+server:
+  port: 8080
+  host: "0.0.0.0"
+  gin_mode: "debug"
+  environment: "development"
+
+database:
+  postgres_dsn: "postgres://postgres:postgres@localhost:5432/account?sslmode=disable"
+
+redis:
+  host: "localhost"
+  port: 6379
+  password: ""
+  database: 0
+  pool_size: 10
+  key_prefix: "web3"
+  nonce_key_prefix: "nonce"
+  nonce_ttl_minutes: 5
+
+auth:
+  kratos_public_url: "http://localhost:4433"
+  kratos_admin_url: "http://localhost:4434"
+  hydra_public_url: "http://localhost:4444"
+  hydra_admin_url: "http://localhost:4445"
+  frontend_url: "https://gateway.web3-local-dev.com"
+
+  wallet_auth_domain: "gateway.web3-local-dev.com"
+  wallet_auth_version: "1"
+  wallet_auth_chain_id: 32382
+  wallet_auth_statement: "Sign in to Web3 Lab"
+
+  cors_allowed_origins:
+    - "https://gateway.web3-local-dev.com"
+    - "http://localhost:3000"
+
+spicedb:
+  endpoint: ""
+  token: ""
+  insecure: true

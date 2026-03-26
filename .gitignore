@@ -1,0 +1,20 @@
+# pixi environments
+.pixi/*
+!.pixi/config.toml
+
+# Node
+node_modules/
+contracts/node_modules/
+
+# Hardhat
+contracts/artifacts/
+contracts/cache/
+contracts/typechain-types/
+contracts/coverage/
+contracts/coverage.json
+contracts/deployments.json
+contracts/seed-addresses.json
+
+# Secrets
+.env
+.env.*

@@ -1,0 +1,17 @@
+apiVersion: apisix.apache.org/v1alpha1
+kind: GatewayProxy
+metadata:
+  name: apisix
+  namespace: apisix
+spec:
+  provider:
+    type: ControlPlane
+    controlPlane:
+      mode: apisix
+      auth:
+        type: AdminKey
+        adminKey:
+          value: edd1c9f034335f136f87ad84b625c8f1
+      service:
+        name: apisix-admin
+        port: 9180

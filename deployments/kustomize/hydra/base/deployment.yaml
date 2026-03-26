@@ -1,0 +1,88 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hydra-deployment
+  labels:
+    app: hydra
+    component: oauth2-server
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: hydra
+  template:
+    metadata:
+      labels:
+        app: hydra
+        component: oauth2-server
+    spec:
+      initContainers:
+        - name: hydra-migrate
+          image: oryd/hydra:v2.3.0
+          command:
+            - hydra
+          args:
+            - migrate
+            - sql
+            - -e
+            - --yes
+            - --config
+            - /etc/config/hydra/hydra.yml
+          envFrom:
+            - configMapRef:
+                name: hydra-env
+          volumeMounts:
+            - name: hydra-config-volume
+              mountPath: /etc/config/hydra
+              readOnly: true
+      containers:
+        - name: hydra
+          image: oryd/hydra:v2.3.0
+          command:
+            - hydra
+          args:
+            - serve
+            - all
+            - --config
+            - /etc/config/hydra/hydra.yml
+          envFrom:
+            - configMapRef:
+                name: hydra-env
+          ports:
+            - name: public
+              containerPort: 4444
+              protocol: TCP
+            - name: admin
+              containerPort: 4445
+              protocol: TCP
+          volumeMounts:
+            - name: hydra-config-volume
+              mountPath: /etc/config/hydra
+              readOnly: true
+          livenessProbe:
+            httpGet:
+              path: /health/alive
+              port: 4445
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 5
+          readinessProbe:
+            httpGet:
+              path: /health/ready
+              port: 4445
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 5
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+      volumes:
+        - name: hydra-config-volume
+          configMap:
+            name: hydra-config

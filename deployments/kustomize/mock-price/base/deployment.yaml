@@ -1,0 +1,52 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mock-price-api
+  labels:
+    app: mock-price-api
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mock-price-api
+  template:
+    metadata:
+      labels:
+        app: mock-price-api
+    spec:
+      containers:
+        - name: mock-price
+          image: mock-price:latest
+          ports:
+            - containerPort: 4050
+              name: http
+          env:
+            - name: MOCK_PORT
+              value: "4050"
+            - name: MOCK_COIN_ID
+              value: "labeth"
+            - name: MOCK_PRICE_USD
+              value: "2.50"
+            - name: MOCK_MARKET_CAP
+              value: "25000000000"
+            - name: MOCK_24H_VOLUME
+              value: "1000000"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 4050
+            initialDelaySeconds: 5
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 4050
+            initialDelaySeconds: 2
+            periodSeconds: 10
+          resources:
+            requests:
+              memory: "16Mi"
+              cpu: "10m"
+            limits:
+              memory: "32Mi"
+              cpu: "50m"

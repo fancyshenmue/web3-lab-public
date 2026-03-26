@@ -1,0 +1,35 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: spicedb-migrate
+  labels:
+    app: spicedb
+    component: migration
+spec:
+  ttlSecondsAfterFinished: 300
+  template:
+    metadata:
+      labels:
+        app: spicedb
+        component: migration
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: spicedb-migrate
+          image: authzed/spicedb:latest
+          command: ["spicedb"]
+          args:
+            - datastore
+            - migrate
+            - head
+          envFrom:
+            - configMapRef:
+                name: spicedb-env
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 200m
+              memory: 256Mi
+  backoffLimit: 3
