@@ -178,20 +178,20 @@
   },
   "active": "cef7beafb49f0224",
   "lastOpenFiles": [
-    "openspec/specs/frontend-erc721-erc1155-ux/spec.md",
-    "openspec/specs/frontend-erc721-erc1155-ux",
-    "openspec/specs/frontend-erc20-ux/spec.md",
-    "openspec/specs/frontend-erc20-ux",
     "openspec/changes/frontend-erc721-erc1155-ux/tasks.md",
     "openspec/changes/frontend-erc721-erc1155-ux",
+    "openspec/specs/frontend-erc721-erc1155-ux/spec.md",
+    "openspec/specs/frontend-erc721-erc1155-ux",
     "openspec/changes/frontend-erc20-ux/tasks.md",
     "openspec/changes/frontend-erc20-ux",
-    "backend/api",
+    "openspec/specs/frontend-erc20-ux/spec.md",
+    "openspec/specs/frontend-erc20-ux",
     "contracts/artifacts/artifacts.d.ts",
     "contracts/cache/compile-cache.json",
     "contracts/artifacts/build-info/solc-0_8_28-bb56fa24878ce59043c412380f9a51167b4fb871.output.json",
     "contracts/artifacts/build-info/solc-0_8_28-bb56fa24878ce59043c412380f9a51167b4fb871.json",
     "contracts/artifacts/build-info",
+    "contracts/cache/build-info",
     "openspec/changes/account-linking/tasks.md",
     "openspec/specs/account-linking/spec.md",
     "documents/web2-smart-wallet-bridge/sequence-flow.md",
@@ -223,6 +223,7 @@
     "frontend/app-3/src/assets/hero.png",
     "frontend/app-3/README.md",
     "frontend/app-3/node_modules/rolldown/node_modules/@rolldown/pluginutils/README.md",
+    "frontend/app-3/node_modules/@vitejs/plugin-react/README.md",
     "Untitled.canvas"
   ]
 }

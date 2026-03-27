@@ -22,6 +22,7 @@ type TokenBalance = {
   name: string;
   balanceRaw: string;
   type: string;
+  id?: string;
   isOwner?: boolean;
 };
 
@@ -167,20 +168,40 @@ export const DashboardPage = () => {
             name: item.token.name || 'Unknown',
             balanceRaw: item.value,
             type: item.token.type,
+            id: item.token_id || item.token.id || item.id,
           }))
 
-        // Enhance with on-chain owner checks for mint dropdown filtering
+        // Enhance with on-chain owner checks for mint dropdown filtering and verify token type
         const rpcUrl = (window as any).__RUNTIME_CONFIG__?.rpcUrl || 'http://localhost:8545'
         const provider = new ethers.JsonRpcProvider(rpcUrl)
         const enriched = await Promise.all(parsed.map(async (t) => {
+          let isOwner = false;
+          let correctedType = t.type;
           try {
-            const contract = new ethers.Contract(t.address, ['function owner() view returns (address)', 'function hasRole(bytes32,address) view returns (bool)'], provider)
+            const contract = new ethers.Contract(t.address, [
+              'function owner() view returns (address)', 
+              'function hasRole(bytes32,address) view returns (bool)',
+              'function supportsInterface(bytes4) view returns (bool)'
+            ], provider)
+
+            // Correct Blockscout caching issues on newly deployed tokens
+            if (t.type === 'ERC-721' || t.type === 'ERC-1155') {
+              try {
+                const is1155 = await contract.supportsInterface('0xd9b67a26');
+                if (is1155) correctedType = 'ERC-1155';
+                else {
+                  const is721 = await contract.supportsInterface('0x80ac58cd');
+                  if (is721) correctedType = 'ERC-721';
+                }
+              } catch (e) { /* ignore if token doesn't support ERC165 */ }
+            }
+
             const ownerAddr = await contract.owner()
-            return { ...t, isOwner: ownerAddr.toLowerCase() === address.toLowerCase() }
+            isOwner = ownerAddr.toLowerCase() === address.toLowerCase()
           } catch (e) {
             // Contract might not have owner(), network request failed, or is using roles API
-            return { ...t, isOwner: false }
           }
+          return { ...t, isOwner, type: correctedType }
         }))
 
         setPortfolio(enriched)
@@ -200,10 +221,14 @@ export const DashboardPage = () => {
         setSelectedAsset(firstAsset)
         setInteractTokenAddress(firstAsset.address)
         setInteractAmount('')
+        if (firstAsset.id) {
+          setInteractTokenId(firstAsset.id)
+        }
       } else {
         setSelectedAsset(null)
         setInteractTokenAddress('')
         setInteractAmount('')
+        setInteractTokenId(activeToken === 'ERC721' ? '' : '0')
       }
     }
   }, [activeToken, activeSection, portfolio])
@@ -948,7 +973,7 @@ export const DashboardPage = () => {
                         ) : (
                           <div className="relative">
                             <select
-                              value={portfolio.filter(p => p.type.replace('-', '') === activeToken && (activeSection === 'mint' ? p.isOwner : true)).some(p => p.address === interactTokenAddress) ? interactTokenAddress : 'custom'}
+                              value={portfolio.filter(p => p.type.replace('-', '') === activeToken && (activeSection === 'mint' ? p.isOwner : true)).some(p => p.address === interactTokenAddress && (p.id || '') === (interactTokenId === '0' && !p.id ? '' : interactTokenId)) ? `${interactTokenAddress}_${interactTokenId}` : 'custom'}
                               onChange={(e) => {
                                 if (e.target.value === 'custom') {
                                   setSelectedAsset(null);
@@ -956,12 +981,16 @@ export const DashboardPage = () => {
                                   setInteractAmount('');
                                   setAmountError(null);
                                 } else {
-                                  const asset = portfolio.find(p => p.address === e.target.value);
+                                  const [addr, idStr] = e.target.value.split('_');
+                                  const asset = portfolio.find(p => p.address === addr && (p.id || '') === (idStr || ''));
                                   if (asset) {
                                     setSelectedAsset(asset);
                                     setInteractTokenAddress(asset.address);
                                     setInteractAmount('');
                                     setAmountError(null);
+                                    if (asset.id !== undefined) {
+                                      setInteractTokenId(asset.id);
+                                    }
                                   }
                                 }
                               }}
@@ -973,8 +1002,8 @@ export const DashboardPage = () => {
                                 const formattedBalance = ethers.formatUnits(asset.balanceRaw, asset.decimals);
                                 const displayBalance = formattedBalance.length > 10 ? Number(formattedBalance).toFixed(4) : formattedBalance;
                                 return (
-                                  <option key={asset.address} value={asset.address}>
-                                    {asset.name} ({asset.symbol}) — Bal: {displayBalance} {activeSection === 'mint' && asset.isOwner && '⭐ Owned'}
+                                  <option key={`${asset.address}_${asset.id || ''}`} value={`${asset.address}_${asset.id || ''}`}>
+                                    {asset.name} ({asset.symbol}) {asset.id ? `| ID: ${asset.id} ` : ''}— Bal: {displayBalance} {activeSection === 'mint' && asset.isOwner && '⭐ Owned'}
                                   </option>
                                 )
                               })}

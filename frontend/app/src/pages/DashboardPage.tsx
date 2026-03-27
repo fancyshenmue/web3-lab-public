@@ -22,6 +22,7 @@ type TokenBalance = {
   name: string;
   balanceRaw: string;
   type: string;
+  id?: string;
   isOwner?: boolean;
 };
 
@@ -167,6 +168,7 @@ export const DashboardPage = () => {
             name: item.token.name || 'Unknown',
             balanceRaw: item.value,
             type: item.token.type,
+            id: item.token_id || item.token.id || item.id,
           }))
 
         // Enhance with on-chain owner checks for mint dropdown filtering
@@ -200,10 +202,14 @@ export const DashboardPage = () => {
         setSelectedAsset(firstAsset)
         setInteractTokenAddress(firstAsset.address)
         setInteractAmount('')
+        if (firstAsset.id) {
+          setInteractTokenId(firstAsset.id)
+        }
       } else {
         setSelectedAsset(null)
         setInteractTokenAddress('')
         setInteractAmount('')
+        setInteractTokenId(activeToken === 'ERC721' ? '' : '0')
       }
     }
   }, [activeToken, activeSection, portfolio])
@@ -948,7 +954,7 @@ export const DashboardPage = () => {
                         ) : (
                           <div className="relative">
                             <select
-                              value={portfolio.filter(p => p.type.replace('-', '') === activeToken && (activeSection === 'mint' ? p.isOwner : true)).some(p => p.address === interactTokenAddress) ? interactTokenAddress : 'custom'}
+                              value={portfolio.filter(p => p.type.replace('-', '') === activeToken && (activeSection === 'mint' ? p.isOwner : true)).some(p => p.address === interactTokenAddress && (p.id || '') === (interactTokenId === '0' && !p.id ? '' : interactTokenId)) ? `${interactTokenAddress}_${interactTokenId}` : 'custom'}
                               onChange={(e) => {
                                 if (e.target.value === 'custom') {
                                   setSelectedAsset(null);
@@ -956,12 +962,16 @@ export const DashboardPage = () => {
                                   setInteractAmount('');
                                   setAmountError(null);
                                 } else {
-                                  const asset = portfolio.find(p => p.address === e.target.value);
+                                  const [addr, idStr] = e.target.value.split('_');
+                                  const asset = portfolio.find(p => p.address === addr && (p.id || '') === (idStr || ''));
                                   if (asset) {
                                     setSelectedAsset(asset);
                                     setInteractTokenAddress(asset.address);
                                     setInteractAmount('');
                                     setAmountError(null);
+                                    if (asset.id !== undefined) {
+                                      setInteractTokenId(asset.id);
+                                    }
                                   }
                                 }
                               }}
@@ -973,8 +983,8 @@ export const DashboardPage = () => {
                                 const formattedBalance = ethers.formatUnits(asset.balanceRaw, asset.decimals);
                                 const displayBalance = formattedBalance.length > 10 ? Number(formattedBalance).toFixed(4) : formattedBalance;
                                 return (
-                                  <option key={asset.address} value={asset.address}>
-                                    {asset.name} ({asset.symbol}) — Bal: {displayBalance} {activeSection === 'mint' && asset.isOwner && '⭐ Owned'}
+                                  <option key={`${asset.address}_${asset.id || ''}`} value={`${asset.address}_${asset.id || ''}`}>
+                                    {asset.name} ({asset.symbol}) {asset.id ? `| ID: ${asset.id} ` : ''}— Bal: {displayBalance} {activeSection === 'mint' && asset.isOwner && '⭐ Owned'}
                                   </option>
                                 )
                               })}
