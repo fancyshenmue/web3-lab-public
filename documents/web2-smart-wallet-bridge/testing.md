@@ -107,7 +107,8 @@ Because the Smart Wallet is the sole owner, executing a `mint(address)` operatio
 **Verification Steps:**
 1. Login as User A via Google OIDC.
 2. Deploy an ERC-20 token using User A's abstract wallet. (Saves to On-Chain mapping).
-3. Select this new token from the dashboard dropdown and Mint +100 tokens successfully.
+3. From the dashboard dropdown, select `+(Enter Custom Contract Address)` and paste the deployed ERC-20 token address (Note: 0-balance freshly deployed contracts bypass the Blockscout portfolio indexer until their first mint). Mint +100 tokens successfully.
 4. Login as User B via Email Identity.
 5. Provide User A's token contract address into User B's UI and attempt a Mint action.
-6. The bundler/prover circuit will cleanly **FAIL** resolving `OwnableUnauthorizedAccount` because User B does not cryptographically control the deployed token infrastructure!
+6. The frontend ownership evaluation will forcefully **hide** the token from User B's portfolio dropdown.
+7. If User B attempts to bypass the UI constraint by forcibly using the `+(Enter Custom Contract Address)` option to submit a mint intent for User A's contract, the bundler/prover circuit will cleanly **FAIL** resolving `OwnableUnauthorizedAccount` because User B does not cryptographically control the deployed token infrastructure!

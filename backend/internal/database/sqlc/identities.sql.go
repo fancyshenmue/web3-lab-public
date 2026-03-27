@@ -72,6 +72,18 @@ func (q *Queries) CreateAccountIdentity(ctx context.Context, arg CreateAccountId
 	return i, err
 }
 
+const countActiveIdentitiesByAccountID = `-- name: CountActiveIdentitiesByAccountID :one
+SELECT COUNT(*) FROM account_identities
+WHERE account_id = $1 AND unlinked_at IS NULL
+`
+
+func (q *Queries) CountActiveIdentitiesByAccountID(ctx context.Context, accountID pgtype.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, countActiveIdentitiesByAccountID, accountID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const deleteAccountIdentity = `-- name: DeleteAccountIdentity :exec
 DELETE FROM account_identities WHERE identity_id = $1
 `

@@ -67,12 +67,29 @@ func (s *Server) setupRoutes() {
 		adminClients.DELETE("/:id", s.clientHandler.DeleteClient)
 	}
 
-	// SIWE wallet authentication
+	// SIWE wallet authentication (public)
 	siwe := v1.Group("/siwe")
 	{
 		siwe.GET("/nonce", s.siweHandler.GetNonce)
 		siwe.POST("/verify", s.siweHandler.Verify)
 		siwe.POST("/authenticate", s.siweHandler.Authenticate)
+	}
+
+	// --- Authenticated routes (JWT required) ---
+
+	// Authenticated account routes: /api/v1/accounts/me
+	me := v1.Group("/accounts/me")
+	me.Use(jwtAuthMiddleware(s.accountService))
+	{
+		me.GET("/identities", s.accountHandler.GetMyIdentities)
+		me.DELETE("/identities/:identity_id", s.accountHandler.UnlinkMyIdentity)
+	}
+
+	// Authenticated SIWE link: /api/v1/auth/siwe/link
+	siweAuth := v1.Group("/auth/siwe")
+	siweAuth.Use(jwtAuthMiddleware(s.accountService))
+	{
+		siweAuth.POST("/link", s.siweHandler.LinkEOA)
 	}
 
 	// Message Template Administration

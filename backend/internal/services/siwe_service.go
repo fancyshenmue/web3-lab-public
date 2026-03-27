@@ -84,6 +84,78 @@ type SIWEAuthenticateResult struct {
 	IsNewUser  bool      `json:"is_new_user"`
 }
 
+// SIWELinkResult is returned by LinkEOA.
+type SIWELinkResult struct {
+	IdentityID     uuid.UUID `json:"identity_id"`
+	ProviderID     string    `json:"provider_id"`
+	ProviderUserID string    `json:"provider_user_id"`
+	AccountID      uuid.UUID `json:"account_id"`
+}
+
+// LinkEOA verifies a SIWE signature and links the EOA as a new identity to an existing account.
+func (s *SIWEService) LinkEOA(ctx context.Context, accountID uuid.UUID, message, signature, protocol string) (*SIWELinkResult, error) {
+	// 1. Parse message to extract address and nonce
+	address, nonce, err := s.parseMessage(message, protocol)
+	if err != nil {
+		return nil, fmt.Errorf("parse message: %w", err)
+	}
+
+	addr := strings.ToLower(address)
+
+	// 2. Verify nonce
+	valid, err := s.nonces.Verify(ctx, addr, nonce)
+	if err != nil {
+		return nil, fmt.Errorf("verify nonce: %w", err)
+	}
+	if !valid {
+		return nil, fmt.Errorf("invalid or expired nonce")
+	}
+
+	// 3. Verify signature
+	ok, err := s.verifySignature(address, signature, message, protocol)
+	if err != nil {
+		return nil, fmt.Errorf("verify signature: %w", err)
+	}
+	if !ok {
+		return nil, fmt.Errorf("signature does not match address")
+	}
+
+	// 4. Check if this EOA is already linked to any account
+	existing, err := s.accounts.GetIdentityByProviderUserID(ctx, database.ProviderEOA, addr)
+	if err != nil {
+		return nil, fmt.Errorf("lookup existing identity: %w", err)
+	}
+	if existing != nil {
+		return nil, fmt.Errorf("this wallet is already linked to an account")
+	}
+
+	// 5. Create Kratos identity for this wallet
+	kratosID, err := s.kratos.CreateIdentityWithWallet(ctx, addr)
+	if err != nil {
+		return nil, fmt.Errorf("create kratos identity: %w", err)
+	}
+
+	// 6. Link to existing account (non-primary)
+	attrs, _ := json.Marshal(map[string]string{"eoa_address": addr})
+	ident, err := s.accounts.LinkIdentityToAccount(ctx, accountID, kratosID, database.ProviderEOA, addr, attrs)
+	if err != nil {
+		return nil, fmt.Errorf("link identity: %w", err)
+	}
+
+	logs.FromContext(ctx).Info("SIWE: EOA linked to existing account",
+		zap.String("address", addr),
+		zap.String("account_id", accountID.String()),
+		zap.String("identity_id", ident.IdentityID.String()),
+	)
+
+	return &SIWELinkResult{
+		IdentityID:     ident.IdentityID,
+		ProviderID:     database.ProviderEOA,
+		ProviderUserID: addr,
+		AccountID:      accountID,
+	}, nil
+}
+
 // GenerateNonce resolves the message template, generates a nonce, and returns
 // a pre-formatted message for the wallet to sign.
 func (s *SIWEService) GenerateNonce(ctx context.Context, address, protocol string, clientID *uuid.UUID) (*NonceResult, error) {

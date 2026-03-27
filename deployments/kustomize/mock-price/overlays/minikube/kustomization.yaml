@@ -17,4 +17,4 @@ patches:
 images:
 - name: mock-price
   newName: mock-price
-  newTag: 20260325_v0_0_24
+  newTag: 20260327_v0_0_82

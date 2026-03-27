@@ -133,9 +133,11 @@ Resets the entire chain with a new genesis time. All on-chain state is lost.
 
 ### `make setup-beacon-peers`
 
-Queries each beacon's `/eth/v1/node/identity` via port-forward, creates a `beacon-peers` ConfigMap with multiaddr entries, and rollout restarts the beacon StatefulSet. After restarting, it sleeps for 30 seconds to allow the DBs to initialize cleanly, and then automatically deploys the `validator` StatefulSet. Must be re-run after any full redeployment.
+Queries each beacon's `/eth/v1/node/identity` via port-forward, creates a `beacon-peers` ConfigMap with multiaddr entries, and rollout restarts the beacon StatefulSet. Waits for the rolling restart to fully complete (`kubectl rollout status`) before deploying the `validator` StatefulSet. Must be re-run after any full redeployment.
 
 ## Known Constraints
+
+- **Beacon Fork on Deploy (Resolved)**: Previously, `setup-beacon-peers` used a hard-coded `sleep 30` before deploying validators. The beacon rolling restart (ordinal 2→1→0) takes ~90s, so validators were deployed before beacon-0 restarted — validator-0 connected to the un-restarted beacon-0 (no peer config), causing a permanent minority fork. Fixed by replacing `sleep 30` with `kubectl rollout status statefulset/beacon`.
 
 - **Distroless**: Prysm images have no shell. All dynamic config uses `--config-file` with init-container-generated YAML.
 - **Beacon P2P**: Requires `make setup-beacon-peers` after first deploy or full redeployment (peer IDs change).

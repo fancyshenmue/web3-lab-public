@@ -86,3 +86,7 @@ WHERE ai.provider_id = 'eoa'
   AND ai.attributes->>'eoa_address' = @eoa_address
   AND ai.unlinked_at IS NULL
 LIMIT 1;
+
+-- name: CountActiveIdentitiesByAccountID :one
+SELECT COUNT(*) FROM account_identities
+WHERE account_id = @account_id AND unlinked_at IS NULL;

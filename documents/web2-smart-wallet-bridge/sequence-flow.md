@@ -182,6 +182,8 @@ sequenceDiagram
 | **ERC-1155** | Token contract | `mint(address,uint256,uint256,bytes)` | to, tokenId, amount, data | Multi-token mint         |
 
 > **Important**: `mint` is NOT `transfer`. Minting creates **new** tokens. The `from` address in the Transfer event is `0x0000...0000`. The calling SCW must have the `MINTER_ROLE` or be the contract owner.
+>
+> **Zero-Balance Indexing Caveat**: Newly deployed token contracts strictly contain a user balance of `0`. The API portfolio endpoint (which structurally omits 0-balance dependencies) will not index this contract until the initial mint occurs. The active frontend mitigates this by enforcing a `+(Enter Custom Contract Address)` dropdown fallback mechanism for all zero-to-one origin mints.
 
 ---
 

@@ -412,6 +412,10 @@ func (r *PostgresRepository) SoftDeleteAccountIdentity(ctx context.Context, iden
 	})
 }
 
+func (r *PostgresRepository) CountActiveIdentitiesByAccountID(ctx context.Context, accountID uuid.UUID) (int64, error) {
+	return r.queries.CountActiveIdentitiesByAccountID(ctx, toUUID(accountID))
+}
+
 func (r *PostgresRepository) DeleteAccountIdentity(ctx context.Context, identityID uuid.UUID) error {
 	return r.queries.DeleteAccountIdentity(ctx, toUUID(identityID))
 }

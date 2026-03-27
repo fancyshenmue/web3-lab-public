@@ -33,6 +33,7 @@ type AccountRepository interface {
 	UpdateIdentityLastUsed(ctx context.Context, identityID uuid.UUID, ts time.Time) error
 	SetPrimaryIdentity(ctx context.Context, accountID, identityID uuid.UUID) error
 	SoftDeleteAccountIdentity(ctx context.Context, identityID uuid.UUID, unlinkedAt time.Time) error
+	CountActiveIdentitiesByAccountID(ctx context.Context, accountID uuid.UUID) (int64, error)
 	DeleteAccountIdentity(ctx context.Context, identityID uuid.UUID) error
 
 	// Account Session operations

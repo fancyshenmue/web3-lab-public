@@ -10,7 +10,8 @@
     "compile": "hardhat compile",
     "test": "hardhat test",
     "deploy": "hardhat run scripts/deploy.js --network localGeth",
-    "test-interact": "hardhat run scripts/test-interact.js --network localGeth"
+    "test-interact": "hardhat run scripts/test-interact.js --network localGeth",
+    "fund-paymaster": "hardhat run scripts/fund_paymaster.ts --network localGeth"
   },
   "keywords": [],
   "author": "",

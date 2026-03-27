@@ -26,12 +26,15 @@ type Server struct {
 	redis      *redis.Client
 	cfg        *config.Config
 
-	healthHandler   *handlers.HealthHandler
-	authHandler     *handlers.AuthHandler
-	accountHandler  *handlers.AccountHandler
-	oauth2Handler   *handlers.OAuth2Handler
-	authzHandler    *handlers.AuthzHandler
-	clientHandler   *handlers.ClientHandler
+	// Services (needed by middleware)
+	accountService *services.AccountService
+
+	healthHandler      *handlers.HealthHandler
+	authHandler        *handlers.AuthHandler
+	accountHandler     *handlers.AccountHandler
+	oauth2Handler      *handlers.OAuth2Handler
+	authzHandler       *handlers.AuthzHandler
+	clientHandler      *handlers.ClientHandler
 	siweHandler        *handlers.SIWEHandler
 	templateHandler    *handlers.MessageTemplateHandler
 	smartWalletHandler *handlers.SmartWalletHandler
@@ -91,7 +94,11 @@ func New(cfg *config.Config) (*Server, error) {
 	healthHandler := handlers.NewHealthHandler(pool, redisClient, cfg.Server.Environment)
 	authHandler := handlers.NewAuthHandler(walletAuthService, nonceService,
 		cfg.Auth.WalletAuthDomain, cfg.Auth.WalletAuthVersion, cfg.Auth.WalletAuthChainID)
-	accountHandler := handlers.NewAccountHandler(accountService)
+
+	smartWalletService, _ := services.NewSmartWalletService(cfg.Web3)
+	bundlerService, _ := services.NewBundlerService(cfg.Web3)
+
+	accountHandler := handlers.NewAccountHandler(accountService, smartWalletService)
 	oauth2Handler := handlers.NewOAuth2Handler(hydraService, kratosService, appClientService, accountService)
 	clientHandler := handlers.NewClientHandler(appClientService)
 
@@ -109,9 +116,6 @@ func New(cfg *config.Config) (*Server, error) {
 	siweHandler := handlers.NewSIWEHandler(siweService)
 	templateHandler := handlers.NewMessageTemplateHandler(templateService)
 
-	smartWalletService, _ := services.NewSmartWalletService(cfg.Web3)
-	bundlerService, _ := services.NewBundlerService(cfg.Web3)
-	
 	smartWalletHandler := handlers.NewSmartWalletHandler(smartWalletService, bundlerService)
 
 	// --- Router ---
@@ -126,6 +130,7 @@ func New(cfg *config.Config) (*Server, error) {
 		pool:            pool,
 		redis:           redisClient,
 		cfg:             cfg,
+		accountService:  accountService,
 		healthHandler:   healthHandler,
 		authHandler:     authHandler,
 		accountHandler:  accountHandler,

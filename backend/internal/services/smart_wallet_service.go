@@ -83,6 +83,14 @@ func (s *SmartWalletService) DeriveWalletAddress(ctx context.Context, ownerAddr 
 	return strings.ToLower(derivedAddress), nil
 }
 
+// DeriveWalletAddressByIdentity derives a wallet address using identity_id as the CREATE2 salt.
+// Each identity gets its own mathematically distinct SCW address.
+func (s *SmartWalletService) DeriveWalletAddressByIdentity(ctx context.Context, identityID uuid.UUID) (string, error) {
+	// Use a fixed genesis account as the owner (index 0) for identity-based derivation
+	ownerAddr, _ := s.GetDeterministicAccount(identityID)
+	return s.DeriveWalletAddress(ctx, ownerAddr, identityID)
+}
+
 // GetInitCode returns the encoded factory payload (factory address + createAccount calldata) required by EntryPoint to deploy a new account.
 func (s *SmartWalletService) GetInitCode(ownerAddr string, accountID uuid.UUID) []byte {
 	uuidBytes, _ := accountID.MarshalBinary()

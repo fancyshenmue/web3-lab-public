@@ -127,3 +127,46 @@ func isNonceError(err error) bool {
 	msg := err.Error()
 	return msg == "invalid or expired nonce" || msg == "verify nonce: nonce not found"
 }
+
+type linkRequest struct {
+	Message   string `json:"message" binding:"required"`
+	Signature string `json:"signature" binding:"required"`
+	Protocol  string `json:"protocol" binding:"required"`
+}
+
+// LinkEOA links a new EOA wallet to the currently authenticated account.
+// POST /api/v1/auth/siwe/link
+func (h *SIWEHandler) LinkEOA(c *gin.Context) {
+	accountID, exists := c.Get("account_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"code": "UNAUTHORIZED", "message": "account_id not found in context"})
+		return
+	}
+
+	var req linkRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"code": "INVALID_REQUEST", "message": err.Error()})
+		return
+	}
+
+	result, err := h.siweService.LinkEOA(c.Request.Context(), accountID.(uuid.UUID), req.Message, req.Signature, req.Protocol)
+	if err != nil {
+		if isVerificationError(err) {
+			c.JSON(http.StatusUnauthorized, gin.H{"code": "INVALID_SIGNATURE", "message": err.Error()})
+			return
+		}
+		if isNonceError(err) {
+			c.JSON(http.StatusUnauthorized, gin.H{"code": "NONCE_EXPIRED", "message": err.Error()})
+			return
+		}
+		msg := err.Error()
+		if msg == "this wallet is already linked to an account" {
+			c.JSON(http.StatusConflict, gin.H{"code": "ALREADY_LINKED", "message": msg})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"code": "INTERNAL_ERROR", "message": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, result)
+}

@@ -1,8 +1,29 @@
 import { useEffect, useState, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { ethers } from 'ethers'
 
 type MenuSection = 'profile' | 'deploy' | 'mint' | 'transfer';
+
+type LinkedIdentity = {
+  identity_id: string;
+  provider_id: string;
+  provider_user_id: string;
+  display_name?: string;
+  is_primary: boolean;
+  linked_at: string;
+  scw_address?: string;
+};
 type TokenType = 'ERC20' | 'ERC721' | 'ERC1155';
+
+type TokenBalance = {
+  address: string;
+  decimals: number;
+  symbol: string;
+  name: string;
+  balanceRaw: string;
+  type: string;
+  isOwner?: boolean;
+};
 
 type ContextMenuType = 'address' | 'tx' | 'token' | 'generic';
 type ContextMenuData = { x: number; y: number; value: string; type: ContextMenuType } | null;
@@ -55,6 +76,12 @@ export const DashboardPage = () => {
   const [txCopied, setTxCopied] = useState(false)
   const [scwCopied, setScwCopied] = useState(false)
 
+  // Portfolio State
+  const [portfolio, setPortfolio] = useState<TokenBalance[]>([])
+  const [portfolioLoading, setPortfolioLoading] = useState(false)
+  const [selectedAsset, setSelectedAsset] = useState<TokenBalance | null>(null)
+  const [amountError, setAmountError] = useState<string | null>(null)
+
   // Layout State
   const [activeSection, setActiveSection] = useState<MenuSection>('deploy')
   const [activeToken, setActiveToken] = useState<TokenType>('ERC20')
@@ -64,6 +91,12 @@ export const DashboardPage = () => {
   const [tokenCopied, setTokenCopied] = useState(false)
   const [addressCopied, setAddressCopied] = useState(false)
   const [showToken, setShowToken] = useState(false)
+
+  // Linked Identities State
+  const [linkedIdentities, setLinkedIdentities] = useState<LinkedIdentity[]>([])
+  const [identitiesLoading, setIdentitiesLoading] = useState(false)
+  const [linkingWallet, setLinkingWallet] = useState(false)
+  const [linkError, setLinkError] = useState<string | null>(null)
 
   // Form State
   const [deployName, setDeployName] = useState('My Web3Token')
@@ -86,6 +119,7 @@ export const DashboardPage = () => {
     } else {
       setToken(storedToken)
       fetchData(storedToken)
+      fetchIdentities(storedToken)
     }
   }, [navigate])
 
@@ -109,11 +143,158 @@ export const DashboardPage = () => {
           if (swRes.ok) {
             const swData = await swRes.json()
             setSmartWalletAddress(swData.wallet_address)
+            fetchPortfolio(swData.wallet_address)
           }
         }
       }
     } catch (err: any) {
       console.error(err)
+    }
+  }
+
+  const fetchPortfolio = async (address: string) => {
+    setPortfolioLoading(true)
+    try {
+      const res = await fetch(`http://localhost:3001/api/v2/addresses/${address}/token-balances`)
+      if (res.ok) {
+        const data = await res.json()
+        const parsed: TokenBalance[] = data
+          .filter((item: any) => item.token)
+          .map((item: any) => ({
+            address: item.token.address,
+            decimals: Number(item.token.decimals || 0),
+            symbol: item.token.symbol || '???',
+            name: item.token.name || 'Unknown',
+            balanceRaw: item.value,
+            type: item.token.type,
+          }))
+
+        // Enhance with on-chain owner checks for mint dropdown filtering
+        const rpcUrl = (window as any).__RUNTIME_CONFIG__?.rpcUrl || 'http://localhost:8545'
+        const provider = new ethers.JsonRpcProvider(rpcUrl)
+        const enriched = await Promise.all(parsed.map(async (t) => {
+          try {
+            const contract = new ethers.Contract(t.address, ['function owner() view returns (address)', 'function hasRole(bytes32,address) view returns (bool)'], provider)
+            const ownerAddr = await contract.owner()
+            return { ...t, isOwner: ownerAddr.toLowerCase() === address.toLowerCase() }
+          } catch (e) {
+            // Contract might not have owner(), network request failed, or is using roles API
+            return { ...t, isOwner: false }
+          }
+        }))
+
+        setPortfolio(enriched)
+      }
+    } catch (err) {
+      console.error("Failed to fetch portfolio:", err)
+    } finally {
+      setPortfolioLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    if (activeSection === 'transfer' || activeSection === 'mint') {
+      const filteredPortfolio = portfolio.filter(p => p.type.replace('-', '') === activeToken && (activeSection === 'mint' ? p.isOwner : true))
+      const firstAsset = filteredPortfolio[0]
+      if (firstAsset) {
+        setSelectedAsset(firstAsset)
+        setInteractTokenAddress(firstAsset.address)
+        setInteractAmount('')
+      } else {
+        setSelectedAsset(null)
+        setInteractTokenAddress('')
+        setInteractAmount('')
+      }
+    }
+  }, [activeToken, activeSection, portfolio])
+
+  const fetchIdentities = async (storedToken: string) => {
+    setIdentitiesLoading(true)
+    try {
+      const res = await fetch(`${gatewayUrl}/api/v1/accounts/me/identities`, {
+        headers: { 'Authorization': `Bearer ${storedToken}` }
+      })
+      if (res.ok) {
+        const data = await res.json()
+        setLinkedIdentities(data.identities || [])
+      }
+    } catch (err) {
+      console.error('Failed to fetch identities:', err)
+    } finally {
+      setIdentitiesLoading(false)
+    }
+  }
+
+  const linkWallet = async () => {
+    if (!(window as any).ethereum || !token) return
+    setLinkingWallet(true)
+    setLinkError(null)
+    try {
+      // 1. Request MetaMask account
+      const accounts = await (window as any).ethereum.request({ method: 'eth_requestAccounts' })
+      const address = accounts?.[0]?.toLowerCase()
+      if (!address) { setLinkError('No wallet selected'); return }
+
+      // 2. Get SIWE nonce
+      const nonceRes = await fetch(`${gatewayUrl}/api/v1/siwe/nonce?address=${address}&protocol=siwe`)
+      if (!nonceRes.ok) { setLinkError('Failed to get nonce'); return }
+      const { message } = await nonceRes.json()
+
+      // 3. Sign message
+      const signature = await (window as any).ethereum.request({
+        method: 'personal_sign',
+        params: [message, address]
+      })
+
+      // 4. Link to account
+      const linkRes = await fetch(`${gatewayUrl}/api/v1/auth/siwe/link`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ message, signature, protocol: 'siwe' })
+      })
+
+      if (!linkRes.ok) {
+        const data = await linkRes.json()
+        setLinkError(data.message || 'Linking failed')
+        return
+      }
+
+      // 5. Refresh identities
+      await fetchIdentities(token)
+    } catch (err: any) {
+      setLinkError(err.message || 'Linking cancelled')
+    } finally {
+      setLinkingWallet(false)
+    }
+  }
+
+  const unlinkIdentity = async (identityId: string) => {
+    if (!token || !confirm('Unlink this identity? The associated SCW assets will become inaccessible.')) return
+    try {
+      const res = await fetch(`${gatewayUrl}/api/v1/accounts/me/identities/${identityId}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${token}` }
+      })
+      if (!res.ok) {
+        const data = await res.json()
+        setLinkError(data.message || 'Unlink failed')
+        return
+      }
+      await fetchIdentities(token)
+    } catch (err: any) {
+      setLinkError(err.message || 'Unlink failed')
+    }
+  }
+
+  const getProviderIcon = (provider: string) => {
+    switch (provider) {
+      case 'eoa': return '⟠'
+      case 'google': return '🔵'
+      case 'email': return '✉️'
+      default: return '🔗'
     }
   }
 
@@ -124,6 +305,29 @@ export const DashboardPage = () => {
     setError(null);
 
     try {
+      let finalAmount = amountOrId || '';
+      if ((type === 'ERC20' || type === 'ERC1155') && finalAmount) {
+        if (selectedAsset) {
+          try {
+            finalAmount = ethers.parseUnits(finalAmount, selectedAsset.decimals).toString();
+          } catch (e: any) {
+            throw new Error(`Invalid decimals in ${type} amount string: ` + e.message);
+          }
+        } else if (tokenAddr) {
+          try {
+            const r = await fetch(`http://localhost:3001/api/v2/tokens/${tokenAddr}`);
+            let decimals = type === 'ERC20' ? 18 : 0;
+            if (r.ok) {
+              const data = await r.json();
+              if (data.decimals !== undefined && data.decimals !== null) decimals = Number(data.decimals);
+            }
+            finalAmount = ethers.parseUnits(finalAmount, decimals).toString();
+          } catch (e: any) {
+            throw new Error(`Failed to parse ${type} amount: ` + e.message);
+          }
+        }
+      }
+
       const res = await fetch(`${gatewayUrl}/api/v1/wallet/execute`, {
         method: 'POST',
         headers: {
@@ -135,7 +339,7 @@ export const DashboardPage = () => {
           action: action,
           token_type: type,
           to: to || '',
-          amount: amountOrId || '',
+          amount: finalAmount,
           token_id: interactTokenId || '',
           token_address: tokenAddr || '',
           name: name || '',
@@ -318,7 +522,7 @@ export const DashboardPage = () => {
                 onClick={() => setActiveToken(t)}
                 className={`w-full text-left pl-14 pr-4 py-2 text-[13px] transition-all
                   ${activeToken === t
-                    ? 'text-white font-medium bg-emerald-600/20 shadow-[inset_2px_0_0_0_#10b981]'
+                    ? 'text-white font-medium bg-emerald-600/20 shadow-[inset_2px_0_0_0_#3b82f6]'
                     : 'text-gray-500 hover:text-gray-300 hover:bg-white/5'}
                 `}
               >
@@ -460,6 +664,71 @@ export const DashboardPage = () => {
           </div>
         </div>
       )}
+
+      {/* Linked Identities & Wallets */}
+      <div className="bg-[#1e293b]/70 border border-gray-700/50 shadow-2xl backdrop-blur-md rounded-2xl overflow-hidden">
+        <div className="px-5 py-3.5 border-b border-gray-700/50 flex items-center justify-between">
+          <h4 className="text-xs font-bold text-gray-400 uppercase tracking-widest">Linked Identities & Wallets</h4>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={linkWallet}
+              disabled={linkingWallet}
+              className="text-xs font-semibold px-3 py-1.5 bg-green-500/10 hover:bg-green-500/20 text-green-400 hover:text-green-300 rounded-lg transition-all border border-green-500/20 disabled:opacity-50"
+            >
+              {linkingWallet ? '⏳ Linking...' : '⟠ Link Wallet'}
+            </button>
+          </div>
+        </div>
+
+        {linkError && (
+          <div className="mx-5 mt-3 px-3 py-2 bg-red-900/30 border border-red-500/20 rounded-lg text-xs text-red-400">
+            {linkError}
+            <button onClick={() => setLinkError(null)} className="ml-2 text-red-500 hover:text-red-300">✕</button>
+          </div>
+        )}
+
+        <div className="p-4 space-y-3">
+          {identitiesLoading ? (
+            <div className="text-center py-6">
+              <div className="animate-spin inline-block rounded-full h-6 w-6 border-2 border-gray-700 border-t-emerald-500"></div>
+            </div>
+          ) : linkedIdentities.length === 0 ? (
+            <div className="text-center py-6 text-gray-500 text-sm">No linked identities found</div>
+          ) : (
+            linkedIdentities.map((ident) => (
+              <div
+                key={ident.identity_id}
+                className="bg-[#0b1120]/60 border border-gray-700/40 rounded-xl p-4 flex items-center gap-4 hover:border-gray-600/50 transition-colors"
+              >
+                <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-gray-700 to-gray-800 flex items-center justify-center text-lg flex-shrink-0">
+                  {getProviderIcon(ident.provider_id)}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-medium text-white capitalize">{ident.provider_id === 'eoa' ? 'Ethereum Wallet' : ident.provider_id}</span>
+                    {ident.is_primary && (
+                      <span className="px-1.5 py-0.5 bg-emerald-500/20 text-emerald-400 text-[10px] font-bold rounded border border-emerald-500/20">PRIMARY</span>
+                    )}
+                  </div>
+                  <p className="text-xs font-mono text-emerald-300 truncate mt-0.5">{ident.provider_user_id}</p>
+                  {ident.scw_address && (
+                    <p className="text-[10px] font-mono text-gray-500 mt-1">SCW: {ident.scw_address.slice(0, 10)}...{ident.scw_address.slice(-8)}</p>
+                  )}
+                </div>
+                {!ident.is_primary && (
+                  <button
+                    onClick={() => unlinkIdentity(ident.identity_id)}
+                    className="text-xs text-red-400/60 hover:text-red-400 transition-colors flex-shrink-0"
+                    title="Unlink this identity"
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
+            ))
+          )}
+        </div>
+      </div>
 
       {/* Access Token */}
       <div className="bg-[#1e293b]/70 border border-gray-700/50 shadow-2xl backdrop-blur-md rounded-2xl overflow-hidden">
@@ -671,44 +940,167 @@ export const DashboardPage = () => {
                 {/* Interact View */}
                 {(activeSection === 'mint' || activeSection === 'transfer') && (
                   <div className="space-y-6">
-                    <div className="space-y-2">
-                      <label className="text-xs font-bold text-gray-400 uppercase tracking-widest pl-1">Target Token Address (0x)</label>
-                      <input
-                        type="text"
-                        placeholder="Enter the deployed ERC token contract address"
-                        value={interactTokenAddress}
-                        onChange={(e) => setInteractTokenAddress(e.target.value)}
-                        className="w-full px-5 py-3.5 font-mono text-sm bg-[#0b1120] border border-gray-700 rounded-xl text-emerald-300 placeholder-gray-700 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none transition-all shadow-inner"
-                        disabled={txLoading}
-                      />
+                    <div className="space-y-4">
+                      <div className="space-y-2">
+                        <label className="text-xs font-bold text-gray-400 uppercase tracking-widest pl-1">Select Asset (Portfolio)</label>
+                        {portfolioLoading ? (
+                          <div className="w-full px-5 py-3.5 bg-[#0b1120] border border-gray-700 rounded-xl text-gray-500 text-sm">Loading portfolio from blockchain...</div>
+                        ) : (
+                          <div className="relative">
+                            <select
+                              value={portfolio.filter(p => p.type.replace('-', '') === activeToken && (activeSection === 'mint' ? p.isOwner : true)).some(p => p.address === interactTokenAddress) ? interactTokenAddress : 'custom'}
+                              onChange={(e) => {
+                                if (e.target.value === 'custom') {
+                                  setSelectedAsset(null);
+                                  setInteractTokenAddress('');
+                                  setInteractAmount('');
+                                  setAmountError(null);
+                                } else {
+                                  const asset = portfolio.find(p => p.address === e.target.value);
+                                  if (asset) {
+                                    setSelectedAsset(asset);
+                                    setInteractTokenAddress(asset.address);
+                                    setInteractAmount('');
+                                    setAmountError(null);
+                                  }
+                                }
+                              }}
+                              className="w-full px-5 py-3.5 bg-[#0b1120] border border-gray-700 rounded-xl text-white outline-none transition-all shadow-inner focus:border-emerald-500 appearance-none pr-10"
+                              disabled={txLoading}
+                            >
+                              <option value="" disabled>Select a {activeToken} token to {activeSection}...</option>
+                              {portfolio.filter(p => p.type.replace('-', '') === activeToken && (activeSection === 'mint' ? p.isOwner : true)).map(asset => {
+                                const formattedBalance = ethers.formatUnits(asset.balanceRaw, asset.decimals);
+                                const displayBalance = formattedBalance.length > 10 ? Number(formattedBalance).toFixed(4) : formattedBalance;
+                                return (
+                                  <option key={asset.address} value={asset.address}>
+                                    {asset.name} ({asset.symbol}) — Bal: {displayBalance} {activeSection === 'mint' && asset.isOwner && '⭐ Owned'}
+                                  </option>
+                                )
+                              })}
+                              <option value="custom">+(Enter Custom Contract Address)</option>
+                            </select>
+                            <div className="absolute inset-y-0 right-0 flex items-center px-4 pointer-events-none text-gray-500">
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                      {(!interactTokenAddress || !portfolio.filter(p => p.type.replace('-', '') === activeToken && (activeSection === 'mint' ? p.isOwner : true)).some(p => p.address === interactTokenAddress)) && (
+                        <div className="space-y-2 animate-fade-in">
+                          <label className="text-xs font-bold text-gray-400 uppercase tracking-widest pl-1">Target Token Address (0x)</label>
+                          <input
+                            type="text"
+                            placeholder={`Enter the deployed ${activeToken} contract address`}
+                            value={interactTokenAddress}
+                            onChange={(e) => {
+                              setInteractTokenAddress(e.target.value);
+                              setSelectedAsset(null);
+                            }}
+                            className="w-full px-5 py-3.5 font-mono text-sm bg-[#0b1120] border border-gray-700 rounded-xl text-emerald-300 placeholder-gray-700 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none transition-all shadow-inner"
+                            disabled={txLoading}
+                          />
+                        </div>
+                      )}
                     </div>
 
-                    <div className="space-y-2">
-                      <label className="text-xs font-bold text-gray-400 uppercase tracking-widest pl-1">
-                        {activeSection === 'mint' ? 'Mint To Address (0x)' : 'Recipient Address (0x)'}
-                      </label>
-                      <input
-                        type="text"
-                        placeholder={activeSection === 'mint' ? "Leave empty to mint to yourself, or enter destination address" : "Destination address to receive the tokens"}
-                        value={interactTo}
-                        onChange={(e) => setInteractTo(e.target.value)}
-                        className="w-full px-5 py-3.5 font-mono text-sm bg-[#0b1120] border border-gray-700 rounded-xl text-emerald-300 placeholder-gray-700 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none transition-all shadow-inner"
-                        disabled={txLoading}
-                      />
+                    <div className="space-y-4">
+                      <div className="space-y-2">
+                        <label className="text-xs font-bold text-gray-400 uppercase tracking-widest pl-1">
+                          {activeSection === 'mint' ? 'Mint To Address (0x)' : 'Recipient Address (0x)'}
+                        </label>
+                        <div className="relative">
+                          <select
+                            value={linkedIdentities.some(id => id.scw_address === interactTo) ? interactTo : (interactTo === '' ? 'self' : 'custom')}
+                            onChange={(e) => {
+                              if (e.target.value === 'custom') {
+                                setInteractTo('custom');
+                              } else if (e.target.value === 'self') {
+                                setInteractTo('');
+                              } else {
+                                setInteractTo(e.target.value);
+                              }
+                            }}
+                            className="w-full px-5 py-3.5 bg-[#0b1120] border border-gray-700 rounded-xl text-white outline-none transition-all shadow-inner focus:border-emerald-500 appearance-none pr-10"
+                            disabled={txLoading}
+                          >
+                            <option value="self">Self (Current SCW Address)</option>
+                            {linkedIdentities.filter(id => id.scw_address && id.scw_address !== smartWalletAddress).map(ident => (
+                              <option key={ident.identity_id} value={ident.scw_address}>
+                                {ident.provider_id === 'eoa' ? 'Ethereum Wallet' : ident.provider_id} ({ident.provider_user_id}) - {ident.scw_address?.slice(0, 6)}...{ident.scw_address?.slice(-4)}
+                              </option>
+                            ))}
+                            <option value="custom">+(Enter Custom Destination Address)</option>
+                          </select>
+                          <div className="absolute inset-y-0 right-0 flex items-center px-4 pointer-events-none text-gray-500">
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
+                          </div>
+                        </div>
+                      </div>
+
+                      {(!linkedIdentities.some(id => id.scw_address === interactTo) && interactTo !== '') && (
+                        <div className="space-y-2 animate-fade-in">
+                          <label className="text-xs font-bold text-gray-400 uppercase tracking-widest pl-1">Target Identity Address (0x)</label>
+                          <input
+                            type="text"
+                            placeholder="Destination address to receive the tokens"
+                            value={interactTo === 'custom' ? '' : interactTo}
+                            onChange={(e) => setInteractTo(e.target.value)}
+                            className="w-full px-5 py-3.5 font-mono text-sm bg-[#0b1120] border border-gray-700 rounded-xl text-emerald-300 placeholder-gray-700 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none transition-all shadow-inner"
+                            disabled={txLoading}
+                          />
+                        </div>
+                      )}
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                       {activeToken !== 'ERC721' && (
-                        <div className="space-y-2">
-                          <label className="text-xs font-bold text-gray-400 uppercase tracking-widest pl-1">Amount</label>
-                          <input
-                            type="text"
-                            placeholder="e.g. 1000"
-                            value={interactAmount}
-                            onChange={(e) => setInteractAmount(e.target.value)}
-                            className="w-full px-5 py-3.5 bg-[#0b1120] border border-gray-700 rounded-xl text-white placeholder-gray-700 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none transition-all shadow-inner"
-                            disabled={txLoading}
-                          />
+                        <div className="space-y-2 relative">
+                          <label className="text-xs font-bold text-gray-400 uppercase tracking-widest pl-1 flex items-center justify-between">
+                            Amount (Tokens)
+                            {activeSection === 'transfer' && selectedAsset && (
+                              <span className="text-[9px] bg-teal-500/20 text-teal-400 px-2 py-0.5 rounded border border-teal-500/30">
+                                Decimals: {selectedAsset.decimals}
+                              </span>
+                            )}
+                          </label>
+                          <div className="relative">
+                            <input
+                              type="text"
+                              placeholder={
+                                activeSection === 'transfer' && selectedAsset
+                                  ? `Max: ${ethers.formatUnits(selectedAsset.balanceRaw, selectedAsset.decimals)}`
+                                  : "e.g. 10.5"
+                              }
+                              value={interactAmount}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                setInteractAmount(val);
+                                setAmountError(null);
+                                if (activeSection === 'transfer' && selectedAsset && val) {
+                                  const parts = val.split('.');
+                                  if (parts.length > 1 && parts[1].length > selectedAsset.decimals) {
+                                    setAmountError(`Warning: Only ${selectedAsset.decimals} decimal places allowed.`);
+                                  }
+                                }
+                              }}
+                              className={`w-full px-5 py-3.5 bg-[#0b1120] border ${amountError ? 'border-red-500 focus:border-red-500 focus:ring-red-500' : 'border-gray-700 focus:border-emerald-500 focus:ring-emerald-500'} rounded-xl text-white placeholder-gray-700 focus:ring-1 outline-none transition-all shadow-inner ${activeSection === 'transfer' && selectedAsset ? 'pr-20' : ''}`}
+                              disabled={txLoading || (activeSection === 'transfer' && !selectedAsset)}
+                            />
+                            {activeSection === 'transfer' && selectedAsset && (
+                              <button
+                                onClick={() => {
+                                  setInteractAmount(ethers.formatUnits(selectedAsset.balanceRaw, selectedAsset.decimals));
+                                  setAmountError(null);
+                                }}
+                                className="absolute right-3 top-1/2 -translate-y-1/2 px-3 py-1 bg-emerald-500/10 text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/20 text-xs font-bold rounded-lg border border-emerald-500/20 transition-colors shadow-sm"
+                                disabled={txLoading}
+                              >
+                                MAX
+                              </button>
+                            )}
+                          </div>
+                          {amountError && <p className="text-red-400 text-xs mt-1 pl-1 absolute -bottom-5 left-0">{amountError}</p>}
                         </div>
                       )}
                       {activeToken !== 'ERC20' && (
@@ -740,12 +1132,12 @@ export const DashboardPage = () => {
                       if (activeSection === 'deploy') {
                         executeTransaction('deploy_contract', activeToken, '', '', '', deployName, deploySymbol, deployDecimals, deployInitialSupply)
                       } else {
-                        executeTransaction(activeSection as 'mint'|'transfer', activeToken, interactTo, interactAmount, interactTokenAddress)
+                        executeTransaction(activeSection as 'mint'|'transfer', activeToken, interactTo === 'custom' ? '' : interactTo, interactAmount, interactTokenAddress)
                       }
                     }}
-                    disabled={!smartWalletAddress || txLoading || (activeSection === 'deploy' ? (!deployName || !deploySymbol) : !interactTokenAddress)}
+                    disabled={!smartWalletAddress || txLoading || (activeSection === 'deploy' ? (!deployName || !deploySymbol) : (!interactTokenAddress || interactTokenAddress === 'custom' || interactTo === 'custom'))}
                     className={`w-full py-4 px-6 rounded-xl font-bold text-white shadow-lg transition-all border border-black/10 flex items-center justify-center
-                      ${(!smartWalletAddress || (activeSection === 'deploy' ? (!deployName || !deploySymbol) : !interactTokenAddress))
+                      ${(!smartWalletAddress || (activeSection === 'deploy' ? (!deployName || !deploySymbol) : (!interactTokenAddress || interactTokenAddress === 'custom' || interactTo === 'custom')))
                         ? 'bg-gray-800 cursor-not-allowed text-gray-500 shadow-none'
                         : txLoading
                           ? 'bg-emerald-600/50 cursor-wait'

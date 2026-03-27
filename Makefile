@@ -226,8 +226,9 @@ setup-beacon-peers: ## Setup beacon P2P peering (run after deploy-pos, requires 
 	kubectl --context $(MINIKUBE_PROFILE) -n $(NAMESPACE) rollout restart statefulset/beacon; \
 	echo ""; \
 	echo "✅ Beacon P2P peering configured! Beacons will peer on restart."; \
-	echo "🚀 Sleeping 30s to let beacon nodes initialize DB before starting Validator..."; \
-	sleep 30; \
+	echo "⏳ Waiting for beacon rolling restart to complete..."; \
+	kubectl --context $(MINIKUBE_PROFILE) -n $(NAMESPACE) rollout status statefulset/beacon --timeout=180s; \
+	echo "✅ All beacons restarted and ready. Deploying validators..."; \
 	$(MAKE) deploy-validator
 
 deploy-pos: apply-pv deploy-geth deploy-beacon ## Deploy PoS cluster (Geth + Beacon)
@@ -459,8 +460,15 @@ clean-contracts: ## Remove hardhat artifacts and cache
 deploy-contracts: ## Deploy Smart Contracts to local Geth cluster
 	pixi run npm run deploy --workspace=contracts
 
+DEPLOYER_PRIVATE_KEY ?= 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
+USER_PRIVATE_KEY ?= 0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d
+
+fund-paymaster: ## Fund Paymaster with ETH in the EntryPoint
+	PRIVATE_KEY=$(DEPLOYER_PRIVATE_KEY) \
+	pixi run npm run fund-paymaster --workspace=contracts
+
 test-interact: ## Run the interactive simulation test script (deploys tokens + saves addresses)
-	PRIVATE_KEY=0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d \
+	PRIVATE_KEY=$(USER_PRIVATE_KEY) \
 	pixi run npm run test-interact --workspace=contracts
 
 # Seed Data

@@ -1,7 +1,10 @@
 package server
 
 import (
+	"encoding/base64"
+	"encoding/json"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -97,6 +100,77 @@ func corsMiddleware(staticAllowedOrigins []string, clientService *services.AppCl
 			c.AbortWithStatus(http.StatusNoContent)
 			return
 		}
+		c.Next()
+	}
+}
+
+// jwtAuthMiddleware extracts the Bearer token's `sub` claim (Kratos identity UUID),
+// resolves it to the app-level account_id via the identity lookup, and stores both
+// in the gin context. Signature verification is handled upstream by Oathkeeper/gateway.
+func jwtAuthMiddleware(accountService *services.AccountService) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		authHeader := c.GetHeader("Authorization")
+		if !strings.HasPrefix(authHeader, "Bearer ") {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
+				"code": "UNAUTHORIZED", "message": "missing or invalid Authorization header",
+			})
+			return
+		}
+
+		tokenStr := strings.TrimPrefix(authHeader, "Bearer ")
+
+		// Decode JWT payload (second segment) without verification —
+		// signature is validated upstream by Oathkeeper/API gateway.
+		parts := strings.Split(tokenStr, ".")
+		if len(parts) != 3 {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
+				"code": "UNAUTHORIZED", "message": "malformed JWT",
+			})
+			return
+		}
+
+		payloadBytes, err := base64.RawURLEncoding.DecodeString(parts[1])
+		if err != nil {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
+				"code": "UNAUTHORIZED", "message": "invalid JWT payload encoding",
+			})
+			return
+		}
+
+		var claims struct {
+			Sub string `json:"sub"`
+		}
+		if err := json.Unmarshal(payloadBytes, &claims); err != nil || claims.Sub == "" {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
+				"code": "UNAUTHORIZED", "message": "JWT missing sub claim",
+			})
+			return
+		}
+
+		// Parse the sub as a Kratos identity UUID
+		kratosID, err := uuid.Parse(claims.Sub)
+		if err != nil {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
+				"code": "UNAUTHORIZED", "message": "invalid sub format",
+			})
+			return
+		}
+
+		// Resolve to app-level account
+		ident, err := accountService.GetAccountIdentityByKratosID(c.Request.Context(), kratosID)
+		if err != nil || ident == nil {
+			logs.FromContext(c.Request.Context()).Warn("JWT auth: identity not found",
+				zap.String("kratos_id", kratosID.String()),
+			)
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
+				"code": "UNAUTHORIZED", "message": "account not found for token subject",
+			})
+			return
+		}
+
+		c.Set("account_id", ident.AccountID)
+		c.Set("identity_id", ident.IdentityID)
+		c.Set("kratos_identity_id", kratosID)
 		c.Next()
 	}
 }

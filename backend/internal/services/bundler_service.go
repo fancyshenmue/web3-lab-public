@@ -240,11 +240,10 @@ func (s *BundlerService) EncodeExecutionCall(action, tokenType, toStr, amountStr
 	if action == "mint" {
 		if tokenType == "ERC20" {
 			// mint(address,uint256)
-			amountWei := new(big.Int).Mul(amount, big.NewInt(1e18))
 			methodSelector := crypto.Keccak256Hash([]byte("mint(address,uint256)")).Bytes()[:4]
 			innerCallData = append(innerCallData, methodSelector...)
 			innerCallData = append(innerCallData, common.LeftPadBytes(toAddr.Bytes(), 32)...)
-			innerCallData = append(innerCallData, common.LeftPadBytes(amountWei.Bytes(), 32)...)
+			innerCallData = append(innerCallData, common.LeftPadBytes(amount.Bytes(), 32)...)
 		} else if tokenType == "ERC721" {
 			// mint(address)
 			methodSelector := crypto.Keccak256Hash([]byte("mint(address)")).Bytes()[:4]
@@ -264,11 +263,10 @@ func (s *BundlerService) EncodeExecutionCall(action, tokenType, toStr, amountStr
 	} else if action == "transfer" {
 		if tokenType == "ERC20" {
 			// transfer(address,uint256)
-			amountWei := new(big.Int).Mul(amount, big.NewInt(1e18))
 			methodSelector := crypto.Keccak256Hash([]byte("transfer(address,uint256)")).Bytes()[:4]
 			innerCallData = append(innerCallData, methodSelector...)
 			innerCallData = append(innerCallData, common.LeftPadBytes(toAddr.Bytes(), 32)...)
-			innerCallData = append(innerCallData, common.LeftPadBytes(amountWei.Bytes(), 32)...)
+			innerCallData = append(innerCallData, common.LeftPadBytes(amount.Bytes(), 32)...)
 		} else if tokenType == "ERC721" {
 			// transferFrom(address,address,uint256)
 			methodSelector := crypto.Keccak256Hash([]byte("transferFrom(address,address,uint256)")).Bytes()[:4]

@@ -60,7 +60,7 @@ async function main() {
     const erc20Symbol = `LAB-${i}-${erc20Suffix}`;
     
     console.log(`\n  Token ${i}: [${erc20Symbol}]`);
-    const createErc20Tx = await erc20Factory.createToken(`Lab Token ${i} ${erc20Suffix}`, erc20Symbol);
+    const createErc20Tx = await erc20Factory.createToken(`Lab Token ${i} ${erc20Suffix}`, erc20Symbol, 18, 0);
     const erc20Log = (await createErc20Tx.wait()).logs.find(l => l.fragment && l.fragment.name === "ERC20Created");
     const erc20Addr = erc20Log.args[0];
     const erc20 = new ethers.Contract(erc20Addr, erc20Art.abi, signer);

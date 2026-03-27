@@ -21,15 +21,15 @@ make setup-beacon-peers
 
 ### Step Breakdown
 
-| Step | Target               | What It Does                                                                                                   |
-| ---- | -------------------- | -------------------------------------------------------------------------------------------------------------- |
-| 1a   | `delete-pos`         | Deletes Validator, Beacon, and Geth StatefulSets + Services                                                    |
-| 1b   | `cleanup-pos-pvc`    | Deletes all PVCs (`app=geth`, `app=beacon`, `app=validator`)                                                   |
-| 1c   | `cleanup-pos-pv`     | Deletes all 9 PVs (`geth-pv-{0,1,2}`, `beacon-pv-{0,1,2}`, `validator-pv-{0,1,2}`)                             |
-| 1d   | `cleanup-pos-data`   | SSH into all 3 Minikube nodes and `rm -rf` host path data (`/data/geth`, `/data/beacon`, `/data/validator`)    |
-| 2a   | `apply-pv`           | Re-creates `hostPath` Persistent Volumes                                                                       |
-| 2b   | `deploy-pos`         | Deploys Geth → Beacon (Validator deployment is intentionally delayed)                                          |
-| 3    | `setup-beacon-peers` | Queries peer IDs, creates `beacon-peers` ConfigMap, rolling-restarts beacon, waits 30s, then deploys Validator |
+| Step | Target               | What It Does                                                                                                                       |
+| ---- | -------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| 1a   | `delete-pos`         | Deletes Validator, Beacon, and Geth StatefulSets + Services                                                                        |
+| 1b   | `cleanup-pos-pvc`    | Deletes all PVCs (`app=geth`, `app=beacon`, `app=validator`)                                                                       |
+| 1c   | `cleanup-pos-pv`     | Deletes all 9 PVs (`geth-pv-{0,1,2}`, `beacon-pv-{0,1,2}`, `validator-pv-{0,1,2}`)                                                 |
+| 1d   | `cleanup-pos-data`   | SSH into all 3 Minikube nodes and `rm -rf` host path data (`/data/geth`, `/data/beacon`, `/data/validator`)                        |
+| 2a   | `apply-pv`           | Re-creates `hostPath` Persistent Volumes                                                                                           |
+| 2b   | `deploy-pos`         | Deploys Geth → Beacon (Validator deployment is intentionally delayed)                                                              |
+| 3    | `setup-beacon-peers` | Queries peer IDs, creates `beacon-peers` ConfigMap, rolling-restarts beacon, waits for rollout to complete, then deploys Validator |
 
 > [!IMPORTANT]
 > `setup-beacon-peers` requires all 3 beacon pods to be **Running** before it can query their peer IDs. Wait for pods to be ready before running this step.

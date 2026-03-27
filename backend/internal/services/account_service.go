@@ -104,3 +104,52 @@ func (s *AccountService) CreateSession(ctx context.Context, session *database.Ac
 func (s *AccountService) RevokeSession(ctx context.Context, sessionID uuid.UUID) error {
 	return s.repo.RevokeSession(ctx, sessionID, time.Now())
 }
+
+// CountActiveIdentities returns the number of active (non-unlinked) identities for an account.
+func (s *AccountService) CountActiveIdentities(ctx context.Context, accountID uuid.UUID) (int64, error) {
+	return s.repo.CountActiveIdentitiesByAccountID(ctx, accountID)
+}
+
+// LinkIdentityToAccount creates a new (non-primary) identity linked to an existing account.
+func (s *AccountService) LinkIdentityToAccount(ctx context.Context, accountID uuid.UUID, kratosUUID uuid.UUID, providerID, providerUserID string, attributes []byte) (*database.AccountIdentity, error) {
+	ident := &database.AccountIdentity{
+		IdentityID:       uuid.New(),
+		AccountID:        accountID,
+		KratosIdentityID: kratosUUID,
+		ProviderID:       providerID,
+		ProviderUserID:   providerUserID,
+		Attributes:       attributes,
+		Verified:         true,
+		IsPrimary:        false,
+		LinkedAt:         time.Now(),
+	}
+	if err := s.repo.CreateAccountIdentity(ctx, ident); err != nil {
+		return nil, fmt.Errorf("create identity: %w", err)
+	}
+	return ident, nil
+}
+
+// SafeUnlinkIdentity soft-deletes an identity only if it is not the last active identity for the account.
+func (s *AccountService) SafeUnlinkIdentity(ctx context.Context, accountID, identityID uuid.UUID) error {
+	count, err := s.repo.CountActiveIdentitiesByAccountID(ctx, accountID)
+	if err != nil {
+		return fmt.Errorf("count identities: %w", err)
+	}
+	if count <= 1 {
+		return fmt.Errorf("cannot unlink: this is the only remaining identity")
+	}
+
+	// Verify the identity belongs to this account
+	ident, err := s.repo.GetAccountIdentity(ctx, identityID)
+	if err != nil {
+		return fmt.Errorf("get identity: %w", err)
+	}
+	if ident == nil {
+		return fmt.Errorf("identity not found")
+	}
+	if ident.AccountID != accountID {
+		return fmt.Errorf("identity does not belong to this account")
+	}
+
+	return s.repo.SoftDeleteAccountIdentity(ctx, identityID, time.Now())
+}
