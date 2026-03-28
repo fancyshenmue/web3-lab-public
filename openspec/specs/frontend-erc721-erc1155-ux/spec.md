@@ -2,7 +2,7 @@
 
 ## Status
 
-Drafting 📝
+In Progress 🚧
 
 ## Context
 
@@ -15,15 +15,18 @@ This specification establishes a dropdown-driven UI for ERC-721 and ERC-1155 tok
 ## 1. Portfolio Dropdown Selection
 
 ### Transfer Operations
+
 When the user wants to transfer an ERC-721 or ERC-1155 asset, the application MUST present a **Token Selection Dropdown** sourced from the user's fetched portfolio.
 
 - The dropdown must filter and display only assets matching the currently active token standard (e.g., `portfolio.filter(p => p.type === 'ERC-721')`).
 - If the user's portfolio contains no assets of that standard, a fallback input field OR a descriptive empty state warning (e.g. "⚠️ No ERC-721 assets found in this wallet.") should be displayed, mirroring the ERC-20 behavior.
 
 ### Mint Operations
-Minting strictly requires the user to hold the correct privileges (e.g., `owner` or `MINTER_ROLE`) on the target smart contract. Because the standard portfolio endpoint returns *all* tokens the user holds a balance of (including those they do not locally own), displaying the unfiltered portfolio dropdown for minting introduces permission conflicts.
+
+Minting strictly requires the user to hold the correct privileges (e.g., `owner` or `MINTER_ROLE`) on the target smart contract. Because the standard portfolio endpoint returns _all_ tokens the user holds a balance of (including those they do not locally own), displaying the unfiltered portfolio dropdown for minting introduces permission conflicts.
+
 - **On-Chain Ownership Polling**: The frontend MUST dynamically verify ownership by concurrently pinging the blockchain via `ethers.js` (`contract.owner()`) for every asset in the portfolio.
-- **Dropdown Filtering**: The **Token Selection Dropdown** for minting MUST computationally exclude any portfolio asset where the explicit `owner()` does not strictly map to the user's active Smart Contract Wallet Address. 
+- **Dropdown Filtering**: The **Token Selection Dropdown** for minting MUST computationally exclude any portfolio asset where the explicit `owner()` does not strictly map to the user's active Smart Contract Wallet Address.
 - **Owned Indicator**: Verified assets MUST render a clear visual badge (e.g., `⭐ Owned`) inside the dropdown to assure the user the mint transaction will not predictably revert.
 - **Fallback Mechanism**: To support minting from newly deployed contracts with a `0` balance (which won't naturally index in the Blockscout portfolio), the UI MUST explicitly provide a manual input field fallback option (e.g., `+(Enter Custom Contract Address)`).
 
@@ -34,12 +37,14 @@ Minting strictly requires the user to hold the correct privileges (e.g., `owner`
 Unlike ERC-20 tokens, ERC-721 and ERC-1155 assets rely fundamentally on `tokenId`.
 
 ### ERC-721 (Non-Fungible)
+
 - **Amount**: Strictly `1`. The UI does not need to show an `Amount` input field.
-- **Token ID**: For transfers, the user MUST specify the exact `tokenId` they wish to send. *(Note: The portfolio endpoint may only return the contract address and total balance, not the specific enumerated token IDs the user owns. Thus, manual `tokenId` input remains required).*
+- **Token ID**: For transfers, the user MUST specify the exact `tokenId` they wish to send. _(Note: The portfolio endpoint may only return the contract address and total balance, not the specific enumerated token IDs the user owns. Thus, manual `tokenId` input remains required)._
 - **Minting**: Token ID is often auto-incremented by the contract, but the interface can allow an optional or disabled `tokenId` field depending on standard implementation.
 
 ### ERC-1155 (Multi-Token)
-- **Amount**: Required. Can be any valid integer. ERC-1155 tokens generally lack decimals (i.e. decimal = 0), so scaling via `parseEther` is dangerous. 
+
+- **Amount**: Required. Can be any valid integer. ERC-1155 tokens generally lack decimals (i.e. decimal = 0), so scaling via `parseEther` is dangerous.
 - **Token ID**: Required for both Minting and Transferring.
 
 ---
@@ -49,9 +54,108 @@ Unlike ERC-20 tokens, ERC-721 and ERC-1155 assets rely fundamentally on `tokenId
 - **Format**: When displaying balances for ERC-1155, format using the known `decimals` (usually 0) to avoid sub-unit display errors.
 - **Parse**: Input amounts for ERC-1155 MUST be parsed strictly using `ethers.parseUnits(amount, decimals)`.
 
+---
+
 ## 4. Implementation Invariants
 
 1. **Active Standard Tracking**: The UI must instantly toggle between ERC-20, ERC-721, and ERC-1155 filtering based on the `activeToken` state.
 2. **Unified Interface**: The `Select Asset (Portfolio)` dropdown must replace the `Target Token Address (0x)` manual input field for transfers, preventing manual address entry errors for tokens the user already holds.
 3. **Dropdown State Isolation**: To prevent fallback UI input fields from erroneously hiding during tab switches, portfolio matching filters MUST computationally evaluate strictly against the scoped `activeToken` derived array (rather than the global portfolio representation).
 4. **Custom Fallback State Resolution**: Explicit custom input dropdown triggers MUST be bound to distinct discrete string states (e.g., `'custom'`) rather than overloading empty strings (`''`), preventing fallback evaluation collisions with options like inherently empty `Self` payloads.
+
+---
+
+## 5. Image Upload (Dynamic Asset Upload via MinIO)
+
+When creating or minting ERC-721 / ERC-1155 tokens, the frontend MUST support image upload. Images are stored in MinIO via **Presigned PUT URLs** generated by the Backend.
+
+### Upload Flow
+
+1. User selects an image file via a file picker (drag-and-drop supported).
+2. Frontend displays a thumbnail preview of the selected image.
+3. Frontend calls `POST /api/v1/storage/presigned-url` with `{ token_type, contract_address, token_id, file_extension }`.
+4. Backend returns `{ upload_url, object_key, public_url }`.
+5. Frontend `PUT`s the raw binary image data directly to MinIO via the `upload_url` (Presigned URL through MinIO Ingress).
+6. On success, Frontend calls `POST /api/v1/storage/metadata` to trigger server-side metadata JSON generation.
+
+### ERC-721 Create Contract
+
+- When deploying a new ERC-721 via the Factory, the `baseURI` parameter MUST be set to the MinIO internal DNS path:
+  `http://minio.web3.svc.cluster.local:9000/web3lab-assets/erc721/{contract_address}/metadata/`
+- The contract address is not known until after deployment. The Backend MUST resolve the deployed contract address from the transaction receipt and use it to construct the final `baseURI`.
+
+> [!IMPORTANT]
+> Since `baseURI` is set at contract creation time and the contract address is deterministic (CREATE opcode), the Backend can pre-compute or post-update the URI path.
+
+### ERC-721 Mint
+
+- Upload image → `erc721/{contract_address}/images/{token_id}.png`
+- Auto-generate metadata JSON:
+  ```json
+  {
+    "name": "User-provided name",
+    "description": "User-provided description",
+    "image": "https://minio.web3-local-dev.com/web3lab-assets/erc721/{contract_address}/images/{token_id}.png"
+  }
+  ```
+- Upload metadata → `erc721/{contract_address}/metadata/{token_id}` (no file extension, with `Content-Type: application/json`)
+
+### ERC-1155 Create Contract
+
+- The `uri` parameter MUST follow the ERC-1155 `{id}` substitution pattern:
+  `http://minio.web3.svc.cluster.local:9000/web3lab-assets/erc1155/{contract_address}/metadata/{id}.json`
+
+### ERC-1155 Mint
+
+- Upload image → `erc1155/{contract_address}/images/{token_id}.png`
+- Auto-generate metadata JSON (same structure as ERC-721, with `{id}.json` naming)
+- Upload metadata → `erc1155/{contract_address}/metadata/{token_id}.json`
+
+### Dual URL Strategy
+
+> [!IMPORTANT]
+> The **on-chain `tokenURI`** (consumed by Blockscout backend inside k8s) uses K8s internal DNS.
+> The **metadata `image` field** (consumed by user browser) uses the external MinIO Ingress URL.
+> This ensures Blockscout can fetch metadata internally, while browsers render images via the public Ingress.
+
+| Field                         | URL Base                                                      | Consumer                     |
+| ----------------------------- | ------------------------------------------------------------- | ---------------------------- |
+| On-chain `tokenURI` / `uri()` | `http://minio.web3.svc.cluster.local:9000/web3lab-assets/...` | Blockscout backend (k8s pod) |
+| Metadata JSON `image`         | `https://minio.web3-local-dev.com/web3lab-assets/...`         | User browser                 |
+
+---
+
+## 6. ERC-20 Token Icon Upload
+
+ERC-20 has no `tokenURI` standard. Token icons are handled off-chain:
+
+1. Frontend uploads icon image via presigned URL → `erc20/{contract_address}.png`
+2. Backend updates Blockscout Postgres: `UPDATE tokens SET icon_url = '...' WHERE contract_address_hash = ...`
+3. The `icon_url` uses the external MinIO Ingress URL for browser rendering.
+
+---
+
+## 7. Deploy Contract Address Display
+
+After a successful contract deployment, the frontend MUST parse the transaction receipt to extract and display the newly deployed contract address.
+
+### Receipt Log Parsing
+
+The frontend waits for the deploy transaction receipt and scans `receipt.logs` for factory-emitted events:
+
+| Token Type | Event Signature                                                            | Contract Address Location |
+| ---------- | -------------------------------------------------------------------------- | ------------------------- |
+| ERC-20     | `ERC20Created(address indexed, string, string, address)`                   | `topics[1]`               |
+| ERC-721    | `ERC721Created(address indexed, string, string, address indexed)`          | `topics[1]`               |
+| ERC-1155   | `ERC1155Created(address indexed, string, string, string, address indexed)` | `topics[1]`               |
+
+The contract address is extracted via: `ethers.getAddress('0x' + log.topics[1].substring(26))`
+
+### Fire-and-Forget `set_uri` Pattern
+
+> [!IMPORTANT]
+> After deploying ERC-721 or ERC-1155 contracts, the frontend triggers a secondary `set_uri` transaction to bind the MinIO metadata path. This `set_uri` call MUST be executed as a **fire-and-forget background fetch**, NOT through the shared `executeTransaction()` function.
+
+**Rationale**: `executeTransaction()` resets shared UI state (`txResult`, `txLoading`, `deployedContractAddress`) at the start of every call. If `set_uri` is routed through `executeTransaction()`, it overwrites the deploy transaction hash and contract address in the UI. Because `set_uri` is asynchronous and its completion timing is non-deterministic, React's state batching cannot reliably restore the original deploy state.
+
+**Implementation**: The `set_uri` call is made via a direct `fetch()` to `/api/v1/wallet/execute` with `.catch()` error logging, completely bypassing UI state management. This ensures the deploy TX hash and contract address remain stable and visible to the user.

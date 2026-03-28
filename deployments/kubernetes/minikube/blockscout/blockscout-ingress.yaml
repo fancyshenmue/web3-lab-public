@@ -1,0 +1,85 @@
+# Blockscout Ingresses — HTTPS access via cert-manager + nginx ingress
+# Three domains: frontend, backend API, stats microservice
+---
+# 1. Frontend — blockscout.web3-local-dev.com → blockscout-frontend:3000
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: blockscout-frontend-ingress
+  namespace: web3
+  annotations:
+    cert-manager.io/cluster-issuer: "local-ca-issuer"
+    nginx.ingress.kubernetes.io/proxy-http-version: "1.1"
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - blockscout.web3-local-dev.com
+      secretName: blockscout-frontend-tls
+  rules:
+    - host: blockscout.web3-local-dev.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: blockscout-frontend
+                port:
+                  number: 3000
+---
+# 2. Backend API — blockscout-api.web3-local-dev.com → blockscout-backend:4000
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: blockscout-api-ingress
+  namespace: web3
+  annotations:
+    cert-manager.io/cluster-issuer: "local-ca-issuer"
+    # WebSocket support for /socket
+    nginx.ingress.kubernetes.io/proxy-http-version: "1.1"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "300"
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - blockscout-api.web3-local-dev.com
+      secretName: blockscout-api-tls
+  rules:
+    - host: blockscout-api.web3-local-dev.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: blockscout-backend
+                port:
+                  number: 4000
+---
+# 3. Stats — blockscout-stats.web3-local-dev.com → blockscout-stats:8050
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: blockscout-stats-ingress
+  namespace: web3
+  annotations:
+    cert-manager.io/cluster-issuer: "local-ca-issuer"
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - blockscout-stats.web3-local-dev.com
+      secretName: blockscout-stats-tls
+  rules:
+    - host: blockscout-stats.web3-local-dev.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: blockscout-stats
+                port:
+                  number: 8050

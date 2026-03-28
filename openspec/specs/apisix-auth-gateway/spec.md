@@ -73,16 +73,19 @@ graph TB
 
 ### Route & Plugin Matrix
 
-| Path Prefix | Upstream Service | Port | Plugins | Access |
-|---|---|---|---|---|
-| `/identity/*` | `kratos-public` | 4433 | `limit-req`, `cors`, `prometheus`, `proxy-rewrite` | Public |
-| `/oauth2/*` | `hydra-public` | 4444 | `limit-req`, `cors`, `prometheus`, `proxy-rewrite` | Public |
-| `/auth/*` | `oathkeeper-proxy` | 4455 | `limit-req`, `cors`, `prometheus`, `proxy-rewrite` | Public |
-| `/api/*` | `web3-api` | 8080 | `cors`, `prometheus`, `proxy-rewrite` | Public |
-| `/admin/identity/*` | `kratos-admin` | 4434 | `key-auth`, `prometheus`, `proxy-rewrite` | Admin |
-| `/admin/oauth2/*` | `hydra-admin` | 4445 | `key-auth`, `prometheus`, `proxy-rewrite` | Admin |
-| `/admin/auth/*` | `oathkeeper-api` | 4456 | `key-auth`, `prometheus`, `proxy-rewrite` | Admin |
-| `/admin/authz/*` | `spicedb-http` | 8443 | `key-auth`, `prometheus`, `proxy-rewrite` | Admin |
+| Path Prefix         | Upstream Service   | Port | Plugins                                            | Access |
+| ------------------- | ------------------ | ---- | -------------------------------------------------- | ------ |
+| `/identity/*`       | `kratos-public`    | 4433 | `limit-req`, `cors`, `prometheus`, `proxy-rewrite` | Public |
+| `/oauth2/*`         | `hydra-public`     | 4444 | `limit-req`, `cors`, `prometheus`, `proxy-rewrite` | Public |
+| `/auth/*`           | `oathkeeper-proxy` | 4455 | `limit-req`, `cors`, `prometheus`, `proxy-rewrite` | Public |
+| `/api/*`            | `web3-api`         | 8080 | `cors`, `prometheus`, `proxy-rewrite`              | Public |
+| `/admin/identity/*` | `kratos-admin`     | 4434 | `key-auth`, `prometheus`, `proxy-rewrite`          | Admin  |
+| `/admin/oauth2/*`   | `hydra-admin`      | 4445 | `key-auth`, `prometheus`, `proxy-rewrite`          | Admin  |
+| `/admin/auth/*`     | `oathkeeper-api`   | 4456 | `key-auth`, `prometheus`, `proxy-rewrite`          | Admin  |
+| `/admin/authz/*`    | `spicedb-http`     | 8443 | `key-auth`, `prometheus`, `proxy-rewrite`          | Admin  |
+
+> [!NOTE]
+> **MinIO Object Storage** is deliberately excluded from APISIX routing. Asset serving (`minio.web3-local-dev.com`) uses a dedicated NGINX Ingress for performance and separation of concerns. See [MinIO Storage spec](../minio-storage/spec.md) for details.
 
 ## Requirements
 

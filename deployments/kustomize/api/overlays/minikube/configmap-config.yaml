@@ -57,13 +57,13 @@ data:
 
     web3:
       geth_rpc_url: "http://geth-rpc:8545"
-      entry_point_address: "0x5FbDB2315678afecb367f032d93F642f64180aa3"
-      account_factory_address: "0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512"
-      erc20_factory_address: "0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0"
-      erc721_factory_address: "0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9"
-      erc1155_factory_address: "0xDc64a140Aa3E981100a9becA4E685f962f0cF6C9"
+      entry_point_address: "0x49fd2BE640DB2910c2fAb69bB8531Ab6E76127ff"
+      account_factory_address: "0x4631BCAbD6dF18D94796344963cB60d44a4136b6"
+      erc20_factory_address: "0x86A2EE8FAf9A840F7a2c64CA3d51209F9A02081D"
+      erc721_factory_address: "0xA4899D35897033b927acFCf422bc745916139776"
+      erc1155_factory_address: "0xf953b3A269d80e3eB0F2947630Da976B896A8C5b"
       paymaster_private_key: "ac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"
-      paymaster_address: "0x5FC8d32690cc91D4c39d9d3abcBD16989F875707"
+      paymaster_address: "0xAA292E8611aDF267e563f334Ee42320aC96D0463"
       genesis_addresses:
         - "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"
         - "0x70997970C51812dc3A010C7d01b50e0d17dc79C8"
@@ -86,3 +86,13 @@ data:
         - "4bbbf85ce3377467afe5d46f804f221813b2bb87f24d81f60f1fcdbf7cbf4356"
         - "dbda1821b80551c9d65939329250298aa3472ba22feea921c0cf5d620ea67b97"
         - "2a871d0798f97d79848a013d4936a73bf4cc922c825d33c1cf7073dff6d409c6"
+
+    minio:
+      endpoint: "minio.web3.svc.cluster.local:9000"
+      access_key_id: "minioadmin"
+      secret_access_key: "minioadmin"
+      bucket_name: "web3lab-assets"
+      use_ssl: false
+      public_base_url: "https://minio-api.web3-local-dev.com/web3lab-assets"
+      internal_base_url: "http://minio.web3.svc.cluster.local:9000/web3lab-assets"
+      presigned_expiry_minutes: 15

@@ -33156,31 +33156,39 @@
     "relativePath": "openspec/changes/minio-storage/tasks.md",
     "headings": [
       {
-        "heading": "1. OpenSpec",
+        "heading": "MinIO Dynamic Upload & Dedicated Ingress Tasks",
+        "level": 1
+      },
+      {
+        "heading": "1. OpenSpec Updates",
         "level": 2
       },
       {
-        "heading": "2. Storage",
+        "heading": "2. Smart Contracts",
         "level": 2
       },
       {
-        "heading": "3. Kubernetes Manifests",
+        "heading": "3. Infrastructure (K8s)",
         "level": 2
       },
       {
-        "heading": "4. Makefile",
+        "heading": "4. Backend (Go)",
         "level": 2
       },
       {
-        "heading": "5. Bucket Initialization",
+        "heading": "5. Frontend (DashboardPage)",
         "level": 2
       },
       {
-        "heading": "6. Verification",
+        "heading": "6. Seed Data Updates",
         "level": 2
       },
       {
-        "heading": "Status: ✅ ARCHIVED",
+        "heading": "7. Verification",
+        "level": 2
+      },
+      {
+        "heading": "Status: ✅ DONE",
         "level": 2
       }
     ]
@@ -33525,6 +33533,38 @@
       },
       {
         "heading": "4. Implementation Invariants",
+        "level": 2
+      },
+      {
+        "heading": "5. Image Upload (Dynamic Asset Upload via MinIO)",
+        "level": 2
+      },
+      {
+        "heading": "Upload Flow",
+        "level": 3
+      },
+      {
+        "heading": "ERC-721 Create Contract",
+        "level": 3
+      },
+      {
+        "heading": "ERC-721 Mint",
+        "level": 3
+      },
+      {
+        "heading": "ERC-1155 Create Contract",
+        "level": 3
+      },
+      {
+        "heading": "ERC-1155 Mint",
+        "level": 3
+      },
+      {
+        "heading": "Dual URL Strategy",
+        "level": 3
+      },
+      {
+        "heading": "6. ERC-20 Token Icon Upload",
         "level": 2
       }
     ]
@@ -34168,7 +34208,19 @@
         "level": 2
       },
       {
-        "heading": "URL Routing Strategy",
+        "heading": "URL Routing Strategy (Dual URL)",
+        "level": 2
+      },
+      {
+        "heading": "Dynamic Upload Flow (Presigned URL)",
+        "level": 2
+      },
+      {
+        "heading": "ERC-20 Icon Flow",
+        "level": 3
+      },
+      {
+        "heading": "MinIO CORS Configuration",
         "level": 2
       },
       {
@@ -34176,7 +34228,23 @@
         "level": 2
       },
       {
+        "heading": "Blockscout SSRF Configuration",
+        "level": 2
+      },
+      {
+        "heading": "ERC-1155 TokenID Hex Padding (EIP-1155)",
+        "level": 2
+      },
+      {
+        "heading": "Ingress Configuration",
+        "level": 2
+      },
+      {
         "heading": "Seed Data Pipeline",
+        "level": 2
+      },
+      {
+        "heading": "Backend API Endpoints",
         "level": 2
       }
     ]
@@ -34591,6 +34659,11 @@
         "link": "architecture.md",
         "displayText": "Architecture & Sequence Flows",
         "relativePath": "documents/apisix/architecture.md"
+      },
+      {
+        "link": "spec.md",
+        "displayText": "MinIO Storage spec",
+        "relativePath": "openspec/specs/minio-storage/spec.md"
       }
     ]
   },
@@ -36795,6 +36868,28 @@
       },
       {
         "heading": "Expanding the ESLint configuration",
+        "level": 2
+      }
+    ]
+  },
+  {
+    "fileName": "erc721-erc1155-metadata-quirks",
+    "relativePath": "documents/web2-smart-wallet-bridge/erc721-erc1155-metadata-quirks.md",
+    "headings": [
+      {
+        "heading": "ERC-721 and ERC-1155 Metadata Indexing Quirks",
+        "level": 1
+      },
+      {
+        "heading": "1. Blockscout SSRF Internal IP Filtering",
+        "level": 2
+      },
+      {
+        "heading": "2. ERC-1155 `{id}` Zero Padding Standard (EIP-1155)",
+        "level": 2
+      },
+      {
+        "heading": "3. Account Abstraction (`Entrypoint`) Revert Silencing",
         "level": 2
       }
     ]

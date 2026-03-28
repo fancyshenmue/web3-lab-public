@@ -8,4 +8,4 @@ kind: Kustomization
 images:
 - name: web3-frontend-4
   newName: web3-frontend-4
-  newTag: 20260327_v0_0_83
+  newTag: 20260328_v0_0_98

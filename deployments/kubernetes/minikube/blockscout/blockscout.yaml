@@ -56,6 +56,10 @@ spec:
               value: "4000"
             - name: SECRET_KEY_BASE
               value: "RMgI4C1Hxk3EI2RP8AW3LkdeGaqa/01ENHsLJEjOo1CXMXEE6k7e2bSfPNI5lcjp"
+            - name: API_URL
+              value: "https://blockscout-api.web3-local-dev.com"
+            - name: INDEXER_TOKEN_INSTANCE_HOST_FILTERING_ENABLED
+              value: "false"
             - name: ECTO_USE_SSL
               value: "false"
             - name: MIX_ENV

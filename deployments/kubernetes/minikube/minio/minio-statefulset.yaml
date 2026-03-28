@@ -36,6 +36,8 @@ spec:
                 secretKeyRef:
                   name: minio-creds
                   key: rootPassword
+            - name: MINIO_API_CORS_ALLOW_ORIGIN
+              value: "https://app.web3-local-dev.com,https://app.web3-local-dev-2.com,https://app.web3-local-dev.net,https://app.web3-local-dev-2.net,http://localhost:3000"
           ports:
             - containerPort: 9000
               name: api

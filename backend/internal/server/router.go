@@ -108,4 +108,14 @@ func (s *Server) setupRoutes() {
 		wallet.GET("/address/:account_id", s.smartWalletHandler.GetAddress)
 		wallet.POST("/execute", s.smartWalletHandler.ExecuteTransaction)
 	}
+
+	// Storage Routes (MinIO)
+	if s.storageHandler != nil {
+		storage := v1.Group("/storage")
+		{
+			storage.POST("/presigned-url", s.storageHandler.GeneratePresignedURL)
+			storage.POST("/metadata", s.storageHandler.GenerateMetadata)
+			storage.POST("/erc20-icon", s.storageHandler.UploadERC20Icon)
+		}
+	}
 }

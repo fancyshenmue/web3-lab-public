@@ -38,6 +38,7 @@ type Server struct {
 	siweHandler        *handlers.SIWEHandler
 	templateHandler    *handlers.MessageTemplateHandler
 	smartWalletHandler *handlers.SmartWalletHandler
+	storageHandler     *handlers.StorageHandler
 }
 
 // New creates and wires together all dependencies.
@@ -118,6 +119,18 @@ func New(cfg *config.Config) (*Server, error) {
 
 	smartWalletHandler := handlers.NewSmartWalletHandler(smartWalletService, bundlerService)
 
+	// --- Storage (MinIO — optional) ---
+	var storageHandler *handlers.StorageHandler
+	if cfg.MinIO.Endpoint != "" {
+		storageSvc, err := services.NewStorageService(cfg.MinIO)
+		if err != nil {
+			logs.Logger.Warn("MinIO unavailable, storage features disabled", zap.Error(err))
+		} else {
+			storageHandler = handlers.NewStorageHandler(storageSvc)
+			logs.Logger.Info("MinIO storage service ready")
+		}
+	}
+
 	// --- Router ---
 	router := gin.New()
 	router.Use(requestIDMiddleware())
@@ -140,6 +153,7 @@ func New(cfg *config.Config) (*Server, error) {
 		siweHandler:        siweHandler,
 		templateHandler:    templateHandler,
 		smartWalletHandler: smartWalletHandler,
+		storageHandler:     storageHandler,
 		httpServer: &http.Server{
 			Addr:           fmt.Sprintf("%s:%d", cfg.Server.Host, cfg.Server.Port),
 			Handler:        router,

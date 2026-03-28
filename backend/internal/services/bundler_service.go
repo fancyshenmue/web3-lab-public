@@ -286,6 +286,29 @@ func (s *BundlerService) EncodeExecutionCall(action, tokenType, toStr, amountStr
 			innerCallData = append(innerCallData, common.LeftPadBytes(big.NewInt(160).Bytes(), 32)...)
 			innerCallData = append(innerCallData, common.LeftPadBytes(big.NewInt(0).Bytes(), 32)...)
 		}
+	} else if action == "set_uri" {
+		var uriString string
+		if tokenType == "ERC721" {
+			uriString = fmt.Sprintf("http://minio.web3.svc.cluster.local:9000/web3lab-assets/erc721/%s/metadata/", strings.ToLower(tokenAddrStr))
+			methodSelector := crypto.Keccak256Hash([]byte("setBaseURI(string)")).Bytes()[:4]
+			innerCallData = append(innerCallData, methodSelector...)
+		} else if tokenType == "ERC1155" {
+			uriString = fmt.Sprintf("http://minio.web3.svc.cluster.local:9000/web3lab-assets/erc1155/%s/metadata/{id}.json", strings.ToLower(tokenAddrStr))
+			methodSelector := crypto.Keccak256Hash([]byte("setURI(string)")).Bytes()[:4]
+			innerCallData = append(innerCallData, methodSelector...)
+		} else {
+			return "", fmt.Errorf("set_uri not supported for token type: %s", tokenType)
+		}
+
+		offset := big.NewInt(32)
+		length := big.NewInt(int64(len(uriString)))
+		strPadding := ((len(uriString) + 31) / 32) * 32
+		paddedStr := make([]byte, strPadding)
+		copy(paddedStr, uriString)
+
+		innerCallData = append(innerCallData, common.LeftPadBytes(offset.Bytes(), 32)...)
+		innerCallData = append(innerCallData, common.LeftPadBytes(length.Bytes(), 32)...)
+		innerCallData = append(innerCallData, paddedStr...)
 	} else if action == "deploy_contract" {
 		if name == "" { name = "Web3Lab Token" }
 		if symbol == "" { symbol = "W3L" }

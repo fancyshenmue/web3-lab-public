@@ -23,4 +23,8 @@ contract Web3LabERC1155 is ERC1155, Ownable {
     function mintBatch(address to, uint256[] memory ids, uint256[] memory amounts, bytes memory data) public onlyOwner {
         _mintBatch(to, ids, amounts, data);
     }
+
+    function setURI(string memory newuri) public onlyOwner {
+        _setURI(newuri);
+    }
 }

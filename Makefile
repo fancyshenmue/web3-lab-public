@@ -127,14 +127,16 @@ delete-validator: ## Delete Validator from Minikube
 
 # Deploy — Blockscout Explorer
 
-deploy-blockscout: create-namespace ## Deploy Blockscout (postgres + backend + frontend + stats + proxy)
+deploy-blockscout: create-namespace ## Deploy Blockscout (postgres + backend + frontend + stats + proxy + ingress)
 	kubectl --context $(MINIKUBE_PROFILE) apply -f deployments/kubernetes/minikube/blockscout/postgres.yaml
 	kubectl --context $(MINIKUBE_PROFILE) apply -f deployments/kubernetes/minikube/blockscout/stats.yaml
 	kubectl --context $(MINIKUBE_PROFILE) apply -f deployments/kubernetes/minikube/blockscout/blockscout.yaml
 	kubectl --context $(MINIKUBE_PROFILE) apply -f deployments/kubernetes/minikube/blockscout/frontend.yaml
 	kubectl --context $(MINIKUBE_PROFILE) apply -f deployments/kubernetes/minikube/blockscout/proxy.yaml
+	kubectl --context $(MINIKUBE_PROFILE) apply -f deployments/kubernetes/minikube/blockscout/blockscout-ingress.yaml
 
 delete-blockscout: ## Delete Blockscout from Minikube
+	kubectl --context $(MINIKUBE_PROFILE) -n $(NAMESPACE) delete -f deployments/kubernetes/minikube/blockscout/blockscout-ingress.yaml --ignore-not-found=true
 	kubectl --context $(MINIKUBE_PROFILE) -n $(NAMESPACE) delete -f deployments/kubernetes/minikube/blockscout/proxy.yaml --ignore-not-found=true
 	kubectl --context $(MINIKUBE_PROFILE) -n $(NAMESPACE) delete -f deployments/kubernetes/minikube/blockscout/frontend.yaml --ignore-not-found=true
 	kubectl --context $(MINIKUBE_PROFILE) -n $(NAMESPACE) delete -f deployments/kubernetes/minikube/blockscout/blockscout.yaml --ignore-not-found=true
@@ -157,12 +159,14 @@ restart-blockscout: ## Rollout restart Blockscout (backend + stats + frontend)
 
 # Deploy — MinIO Distributed Storage
 
-deploy-minio: create-namespace ## Deploy MinIO (Secret, Service, StatefulSet)
+deploy-minio: create-namespace ## Deploy MinIO (Secret, Service, StatefulSet, Ingress)
 	kubectl --context $(MINIKUBE_PROFILE) apply -f deployments/kubernetes/minikube/minio/minio-secret.yaml
 	kubectl --context $(MINIKUBE_PROFILE) apply -f deployments/kubernetes/minikube/minio/minio-service.yaml
 	kubectl --context $(MINIKUBE_PROFILE) apply -f deployments/kubernetes/minikube/minio/minio-statefulset.yaml
+	kubectl --context $(MINIKUBE_PROFILE) apply -f deployments/kubernetes/minikube/minio/minio-ingress.yaml
 
 delete-minio: ## Delete MinIO from Minikube
+	kubectl --context $(MINIKUBE_PROFILE) -n $(NAMESPACE) delete -f deployments/kubernetes/minikube/minio/minio-ingress.yaml --ignore-not-found=true
 	kubectl --context $(MINIKUBE_PROFILE) -n $(NAMESPACE) delete -f deployments/kubernetes/minikube/minio/minio-statefulset.yaml --ignore-not-found=true
 	kubectl --context $(MINIKUBE_PROFILE) -n $(NAMESPACE) delete -f deployments/kubernetes/minikube/minio/minio-service.yaml --ignore-not-found=true
 	kubectl --context $(MINIKUBE_PROFILE) -n $(NAMESPACE) delete -f deployments/kubernetes/minikube/minio/minio-secret.yaml --ignore-not-found=true
@@ -833,7 +837,7 @@ tls-setup: ## Extract local CA and configure macOS Keychain / /etc/hosts for Aut
 	@sudo security add-trusted-cert -d -r trustRoot -k /Library/Keychains/System.keychain /tmp/root-ca.crt || echo "Warning: Failed to add cert"
 	@rm -f /tmp/root-ca.crt
 	@echo "🌐 Mapping 127.0.0.1 to /etc/hosts (may prompt for password)..."
-	@sudo sh -c "sed -i.bak '/# BEGIN Web3-Lab Local Auth/,/# END Web3-Lab Local Auth/d' /etc/hosts && echo \"\n# BEGIN Web3-Lab Local Auth\n127.0.0.1 gateway.web3-local-dev.com\n127.0.0.1 hydra.web3-local-dev.com\n127.0.0.1 hydra-admin.web3-local-dev.com\n127.0.0.1 kratos.web3-local-dev.com\n127.0.0.1 kratos-admin.web3-local-dev.com\n127.0.0.1 auth.web3-local-dev.com\n127.0.0.1 auth-api.web3-local-dev.com\n127.0.0.1 spicedb.web3-local-dev.com\n127.0.0.1 api.web3-local-dev.com\n127.0.0.1 app.web3-local-dev.com\n# END Web3-Lab Local Auth\" >> /etc/hosts && rm -f /etc/hosts.bak"
+	@sudo sh -c "sed -i.bak '/# BEGIN Web3-Lab Local Auth/,/# END Web3-Lab Local Auth/d' /etc/hosts && echo \"\n# BEGIN Web3-Lab Local Auth\n127.0.0.1 gateway.web3-local-dev.com\n127.0.0.1 hydra.web3-local-dev.com\n127.0.0.1 hydra-admin.web3-local-dev.com\n127.0.0.1 kratos.web3-local-dev.com\n127.0.0.1 kratos-admin.web3-local-dev.com\n127.0.0.1 auth.web3-local-dev.com\n127.0.0.1 auth-api.web3-local-dev.com\n127.0.0.1 spicedb.web3-local-dev.com\n127.0.0.1 api.web3-local-dev.com\n127.0.0.1 app.web3-local-dev.com\n127.0.0.1 blockscout.web3-local-dev.com\n127.0.0.1 blockscout-api.web3-local-dev.com\n127.0.0.1 blockscout-stats.web3-local-dev.com\n# END Web3-Lab Local Auth\" >> /etc/hosts && rm -f /etc/hosts.bak"
 	@echo "✅ TLS Setup complete! You can now visit https://kratos.web3-local-dev.com without browser warnings."
 
 deploy-auth: deploy-auth-postgres deploy-redis deploy-hydra deploy-kratos deploy-oathkeeper deploy-spicedb deploy-api deploy-apisix-auth-gateway ## Deploy all auth services

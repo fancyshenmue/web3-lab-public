@@ -17,6 +17,7 @@ type Config struct {
 	Auth     AuthConfig     `mapstructure:"auth"`
 	SpiceDB  SpiceDBConfig  `mapstructure:"spicedb"`
 	Web3     Web3Config     `mapstructure:"web3"`
+	MinIO    MinIOConfig    `mapstructure:"minio"`
 }
 
 type ServerConfig struct {
@@ -87,6 +88,17 @@ type Web3Config struct {
 	// Genesis Mock Accounts (for local TEE generation)
 	GenesisAddresses []string `mapstructure:"genesis_addresses"`
 	GenesisKeys      []string `mapstructure:"genesis_keys"`
+}
+
+type MinIOConfig struct {
+	Endpoint        string `mapstructure:"endpoint"`
+	AccessKeyID     string `mapstructure:"access_key_id"`
+	SecretAccessKey  string `mapstructure:"secret_access_key"`
+	BucketName      string `mapstructure:"bucket_name"`
+	UseSSL          bool   `mapstructure:"use_ssl"`
+	PublicBaseURL   string `mapstructure:"public_base_url"`
+	InternalBaseURL string `mapstructure:"internal_base_url"`
+	PresignedExpiry int    `mapstructure:"presigned_expiry_minutes"`
 }
 
 // Load reads config from file and env vars.

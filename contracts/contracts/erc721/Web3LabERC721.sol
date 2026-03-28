@@ -24,4 +24,8 @@ contract Web3LabERC721 is ERC721, Ownable {
         uint256 tokenId = _nextTokenId++;
         _mint(to, tokenId);
     }
+
+    function setBaseURI(string memory newBaseURI) public onlyOwner {
+        _baseTokenURI = newBaseURI;
+    }
 }

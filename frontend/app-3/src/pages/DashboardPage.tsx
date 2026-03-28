@@ -67,6 +67,8 @@ export const DashboardPage = () => {
   const navigate = useNavigate()
   const [token, setToken] = useState<string | null>(null)
   const { gatewayUrl } = (window as any).__RUNTIME_CONFIG__ || { gatewayUrl: 'https://gateway.web3-local-dev.com' }
+  const blockscoutUrl = import.meta.env.VITE_BLOCKSCOUT_URL || 'https://blockscout.web3-local-dev.com'
+  const blockscoutApiUrl = import.meta.env.VITE_BLOCKSCOUT_API_URL || 'https://blockscout-api.web3-local-dev.com'
 
   const [userInfo, setUserInfo] = useState<any>(null)
   const [smartWalletAddress, setSmartWalletAddress] = useState<string | null>(null)
@@ -76,6 +78,8 @@ export const DashboardPage = () => {
   const [error, setError] = useState<string | null>(null)
   const [txCopied, setTxCopied] = useState(false)
   const [scwCopied, setScwCopied] = useState(false)
+  const [deployedContractAddress, setDeployedContractAddress] = useState<string | null>(null)
+  const [contractAddrCopied, setContractAddrCopied] = useState(false)
 
   // Portfolio State
   const [portfolio, setPortfolio] = useState<TokenBalance[]>([])
@@ -108,6 +112,14 @@ export const DashboardPage = () => {
   const [interactTo, setInteractTo] = useState('')
   const [interactAmount, setInteractAmount] = useState('10')
   const [interactTokenId, setInteractTokenId] = useState('0')
+
+  // Image Upload State
+  const [uploadFile, setUploadFile] = useState<File | null>(null)
+  const [uploadPreview, setUploadPreview] = useState<string | null>(null)
+  const [uploadProgress, setUploadProgress] = useState<'idle' | 'uploading' | 'done' | 'error'>('idle')
+  const [nftName, setNftName] = useState('')
+  const [nftDescription, setNftDescription] = useState('')
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   // Context Menu State
   const [contextMenu, setContextMenu] = useState<ContextMenuData>(null)
@@ -156,7 +168,7 @@ export const DashboardPage = () => {
   const fetchPortfolio = async (address: string) => {
     setPortfolioLoading(true)
     try {
-      const res = await fetch(`http://localhost:3001/api/v2/addresses/${address}/token-balances`)
+      const res = await fetch(`${blockscoutApiUrl}/api/v2/addresses/${address}/token-balances`)
       if (res.ok) {
         const data = await res.json()
         const parsed: TokenBalance[] = data
@@ -323,11 +335,12 @@ export const DashboardPage = () => {
     }
   }
 
-  const executeTransaction = async (action: 'mint' | 'transfer' | 'deploy_contract', type: string, to?: string, amountOrId?: string, tokenAddr?: string, name?: string, symbol?: string, decimals?: string, initialSupply?: string) => {
-    if (!userInfo?.sub) return;
+  const executeTransaction = async (action: 'mint' | 'transfer' | 'deploy_contract' | 'set_uri', type: string, to?: string, amountOrId?: string, tokenAddr?: string, name?: string, symbol?: string, decimals?: string, initialSupply?: string) => {
+    if (!userInfo?.sub) return null;
     setTxLoading(true);
     setTxResult(null);
     setError(null);
+    if (action === 'deploy_contract') setDeployedContractAddress(null);
 
     try {
       let finalAmount = amountOrId || '';
@@ -340,7 +353,7 @@ export const DashboardPage = () => {
           }
         } else if (tokenAddr) {
           try {
-            const r = await fetch(`http://localhost:3001/api/v2/tokens/${tokenAddr}`);
+            const r = await fetch(`${blockscoutApiUrl}/api/v2/tokens/${tokenAddr}`);
             let decimals = type === 'ERC20' ? 18 : 0;
             if (r.ok) {
               const data = await r.json();
@@ -377,12 +390,170 @@ export const DashboardPage = () => {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error?.message || 'Transaction failed');
       setTxResult(data);
+      return data;
     } catch (err: any) {
       setError(err.message);
+      return null;
     } finally {
       setTxLoading(false);
     }
   }
+
+  // --- Image Upload Helpers ---
+  const handleFileSelect = (file: File) => {
+    setUploadFile(file)
+    setUploadProgress('idle')
+    const reader = new FileReader()
+    reader.onload = (e) => setUploadPreview(e.target?.result as string)
+    reader.readAsDataURL(file)
+  }
+
+  const clearUpload = () => {
+    setUploadFile(null)
+    setUploadPreview(null)
+    setUploadProgress('idle')
+    if (fileInputRef.current) fileInputRef.current.value = ''
+  }
+
+  const uploadImageToMinIO = async (tokenType: string, contractAddress: string, tokenId: string): Promise<string | null> => {
+    if (!uploadFile) return null
+    const ext = uploadFile.name.split('.').pop()?.toLowerCase() || 'png'
+    try {
+      setUploadProgress('uploading')
+      const presignRes = await fetch(`${gatewayUrl}/api/v1/storage/presigned-url`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ token_type: tokenType, contract_address: contractAddress, token_id: tokenId, file_extension: ext })
+      })
+      if (!presignRes.ok) throw new Error('Failed to get upload URL')
+      const { upload_url, public_url } = await presignRes.json()
+      const putRes = await fetch(upload_url, { method: 'PUT', headers: { 'Content-Type': uploadFile.type || 'image/png' }, body: uploadFile })
+      if (!putRes.ok) throw new Error('Upload failed')
+      setUploadProgress('done')
+      return public_url
+    } catch (err) {
+      setUploadProgress('error')
+      console.error('Image upload failed:', err)
+      return null
+    }
+  }
+
+  const generateMetadata = async (tokenType: string, contractAddress: string, tokenId: string, imageUrl: string) => {
+    const res = await fetch(`${gatewayUrl}/api/v1/storage/metadata`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+      body: JSON.stringify({ token_type: tokenType, contract_address: contractAddress, token_id: tokenId, name: nftName || deployName, description: nftDescription, image_url: imageUrl })
+    })
+    if (!res.ok) throw new Error('Metadata generation failed')
+    return await res.json()
+  }
+
+  const registerERC20Icon = async (contractAddress: string, iconUrl: string) => {
+    await fetch(`${gatewayUrl}/api/v1/storage/erc20-icon`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+      body: JSON.stringify({ contract_address: contractAddress, icon_url: iconUrl })
+    })
+  }
+
+  const getNextTokenIdForERC721 = async (contractAddress: string): Promise<string> => {
+    const rpcUrl = (window as any).__RUNTIME_CONFIG__?.rpcUrl || 'http://localhost:8545'
+    const provider = new ethers.JsonRpcProvider(rpcUrl)
+    const contract = new ethers.Contract(contractAddress, ['function ownerOf(uint256) view returns (address)'], provider)
+    
+    let low = 0;
+    let high = 10000;
+    let nextId = 0;
+    
+    while (low <= high) {
+      const mid = Math.floor((low + high) / 2);
+      try {
+        await contract.ownerOf(mid);
+        low = mid + 1;
+      } catch (e) {
+        nextId = mid;
+        high = mid - 1;
+      }
+    }
+    return nextId.toString();
+  }
+
+  const handleSubmitWithUpload = async () => {
+    if (activeSection === 'deploy') {
+      const data = await executeTransaction('deploy_contract', activeToken, '', '', '', deployName, deploySymbol, deployDecimals, deployInitialSupply)
+      if (data && data.transaction_hash) {
+        try {
+          const rpcUrl = (window as any).__RUNTIME_CONFIG__?.rpcUrl || 'http://localhost:8545'
+          const provider = new ethers.JsonRpcProvider(rpcUrl)
+          const receipt = await provider.waitForTransaction(data.transaction_hash, 1, 15000)
+          
+          if (receipt && receipt.logs) {
+            const nftCreated = ethers.id("ERC721Created(address,string,string,address)")
+            const multiTokenCreated = ethers.id("ERC1155Created(address,string,string,string,address)")
+            const tokenCreated = ethers.id("ERC20Created(address,string,string,address)")
+            
+            let contractAddr = '';
+            for (const log of receipt.logs) {
+              if (log.topics[0] === nftCreated || log.topics[0] === multiTokenCreated || log.topics[0] === tokenCreated) {
+                contractAddr = ethers.getAddress('0x' + log.topics[1].substring(26));
+                break;
+              }
+            }
+
+            if (contractAddr) {
+              setDeployedContractAddress(contractAddr);
+              if (activeToken === 'ERC721' || activeToken === 'ERC1155') {
+                // Fire-and-forget set_uri silently — don't touch UI state
+                fetch(`${gatewayUrl}/api/v1/wallet/execute`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                  body: JSON.stringify({
+                    account_id: userInfo.sub, action: 'set_uri', token_type: activeToken,
+                    to: '', amount: '', token_id: '', token_address: contractAddr,
+                    name: '', symbol: '', decimals: '', initial_supply: ''
+                  })
+                }).catch(err => console.error('Background set_uri failed:', err));
+              } else if (activeToken === 'ERC20' && uploadFile) {
+                const iconUrl = await uploadImageToMinIO(activeToken, contractAddr, '0');
+                if (iconUrl) {
+                  await registerERC20Icon(contractAddr, iconUrl);
+                }
+              }
+            }
+          }
+        } catch (err) {
+          console.error("Failed to wait for receipt or parse contract address:", err)
+        }
+      }
+    } else if (activeSection === 'mint' && activeToken !== 'ERC20' && uploadFile) {
+      let targetTokenId = interactTokenId;
+      if (activeToken === 'ERC721') {
+        targetTokenId = await getNextTokenIdForERC721(interactTokenAddress);
+      }
+      
+      const imageUrl = await uploadImageToMinIO(activeToken, interactTokenAddress, targetTokenId)
+      if (imageUrl) await generateMetadata(activeToken, interactTokenAddress, targetTokenId, imageUrl)
+      const to = interactTo === 'custom' ? '' : interactTo
+      await executeTransaction('mint', activeToken, to, interactAmount, interactTokenAddress)
+    } else {
+      const to = interactTo === 'custom' ? '' : interactTo
+      await executeTransaction(activeSection as 'mint'|'transfer', activeToken, to, interactAmount, interactTokenAddress)
+    }
+  }
+
+  useEffect(() => {
+    if (txResult && activeSection === 'deploy' && activeToken === 'ERC20' && uploadFile) {
+      const contractAddr = txResult.contract_address || txResult.data?.contract_address
+      if (contractAddr) {
+        (async () => {
+          const iconUrl = await uploadImageToMinIO('ERC20', contractAddr, '')
+          if (iconUrl) await registerERC20Icon(contractAddr, iconUrl)
+          clearUpload()
+        })()
+      }
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [txResult])
 
   const copyText = (text: string) => {
     if (text) {
@@ -392,7 +563,6 @@ export const DashboardPage = () => {
 
   const truncateAddress = (addr: string) => `${addr.slice(0, 6)}...${addr.slice(-4)}`
 
-  const blockscoutUrl = 'http://localhost:3001'
 
   const detectContextType = (value: string): ContextMenuType => {
     if (/^0x[a-fA-F0-9]{64}$/.test(value)) return 'tx'
@@ -567,7 +737,7 @@ export const DashboardPage = () => {
         <h2 className="text-3xl md:text-5xl font-extrabold text-white tracking-tight mb-4 flex items-center gap-4">
           Profile
           {isWalletUser && (
-            <span className="px-3 py-1.5 bg-yellow-500/10 border border-yellow-500/20 text-yellow-400 text-sm rounded-md font-mono mt-1">SIWE</span>
+            <span className="px-3 py-1.5 bg-pink-500/10 border border-pink-500/20 text-pink-400 text-sm rounded-md font-mono mt-1">SIWE</span>
           )}
         </h2>
         <p className="text-gray-400 text-base md:text-lg max-w-2xl leading-relaxed">
@@ -580,8 +750,8 @@ export const DashboardPage = () => {
       {/* User Card */}
       <div className={`rounded-2xl p-6 border backdrop-blur-md shadow-2xl ${
         isWalletUser
-          ? 'bg-gradient-to-br from-yellow-900/30 to-orange-900/30 border-yellow-500/20'
-          : 'bg-gradient-to-br from-amber-900/30 to-orange-900/30 border-amber-500/20'
+          ? 'bg-gradient-to-br from-pink-900/30 to-fuchsia-900/30 border-pink-500/20'
+          : 'bg-gradient-to-br from-amber-900/30 to-fuchsia-900/30 border-amber-500/20'
       }`}>
         <div className="flex items-center gap-4">
           {userInfo?.picture ? (
@@ -591,11 +761,11 @@ export const DashboardPage = () => {
               className="w-16 h-16 rounded-full border-2 border-white/20 shadow-lg"
             />
           ) : isWalletUser ? (
-            <div className="w-16 h-16 rounded-full bg-gradient-to-br from-yellow-500 to-orange-600 flex items-center justify-center text-white text-2xl font-bold shadow-lg shadow-yellow-500/20">
+            <div className="w-16 h-16 rounded-full bg-gradient-to-br from-pink-500 to-fuchsia-600 flex items-center justify-center text-white text-2xl font-bold shadow-lg shadow-pink-500/20">
               ⟠
             </div>
           ) : (
-            <div className="w-16 h-16 rounded-full bg-gradient-to-br from-amber-500 to-orange-600 flex items-center justify-center text-white text-xl font-bold shadow-lg shadow-amber-500/20">
+            <div className="w-16 h-16 rounded-full bg-gradient-to-br from-amber-500 to-fuchsia-600 flex items-center justify-center text-white text-xl font-bold shadow-lg shadow-amber-500/20">
               {(userInfo?.email?.[0] || userInfo?.sub?.[0] || '?').toUpperCase()}
             </div>
           )}
@@ -607,13 +777,13 @@ export const DashboardPage = () => {
                   <p className="text-sm font-mono text-amber-300">{truncateAddress(walletAddress!)}</p>
                   <button
                     onClick={() => copyAddress()}
-                    className="text-xs text-yellow-400 hover:text-yellow-300 font-medium transition-colors"
+                    className="text-xs text-pink-400 hover:text-pink-300 font-medium transition-colors"
                     title="Copy full address"
                   >
                     {addressCopied ? '✅ Copied' : '📋 Copy'}
                   </button>
                 </div>
-                <span className="inline-flex items-center gap-1 mt-1 px-2 py-0.5 rounded-full text-xs font-medium bg-yellow-500/20 text-yellow-300 border border-yellow-500/20">
+                <span className="inline-flex items-center gap-1 mt-1 px-2 py-0.5 rounded-full text-xs font-medium bg-pink-500/20 text-pink-300 border border-pink-500/20">
                   ⟠ SIWE Connected
                 </span>
               </>
@@ -661,7 +831,7 @@ export const DashboardPage = () => {
           <div className="px-5 py-3.5 border-t border-gray-700/50 flex items-center justify-between">
             <button
               onClick={switchWallet}
-              className="text-sm text-yellow-400 hover:text-yellow-300 font-medium transition-colors flex items-center gap-2"
+              className="text-sm text-pink-400 hover:text-pink-300 font-medium transition-colors flex items-center gap-2"
             >
               🔄 Switch Wallet
             </button>
@@ -698,7 +868,7 @@ export const DashboardPage = () => {
             <button
               onClick={linkWallet}
               disabled={linkingWallet}
-              className="text-xs font-semibold px-3 py-1.5 bg-yellow-500/10 hover:bg-yellow-500/20 text-yellow-400 hover:text-yellow-300 rounded-lg transition-all border border-yellow-500/20 disabled:opacity-50"
+              className="text-xs font-semibold px-3 py-1.5 bg-pink-500/10 hover:bg-pink-500/20 text-pink-400 hover:text-pink-300 rounded-lg transition-all border border-pink-500/20 disabled:opacity-50"
             >
               {linkingWallet ? '⏳ Linking...' : '⟠ Link Wallet'}
             </button>
@@ -805,7 +975,7 @@ export const DashboardPage = () => {
         {/* Brand Area */}
         <div className="p-6">
            <div className="flex items-center gap-3 mb-6">
-             <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-amber-500 to-orange-600 flex items-center justify-center text-white font-bold shadow-lg shadow-amber-500/20">W</div>
+             <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-amber-500 to-fuchsia-600 flex items-center justify-center text-white font-bold shadow-lg shadow-amber-500/20">W</div>
              <h1 className="text-xl font-bold tracking-tight text-white">Developer Console</h1>
            </div>
 
@@ -959,6 +1129,32 @@ export const DashboardPage = () => {
                         </>
                       )}
                     </div>
+
+                    {/* ERC-20 Token Icon Upload (Deploy only) */}
+                    {activeToken === 'ERC20' && (
+                      <div className="space-y-2 mt-2">
+                        <label className="text-xs font-bold text-gray-400 uppercase tracking-widest pl-1 flex items-center gap-2">
+                          Token Icon
+                          <span className="text-[9px] bg-amber-500/20 text-amber-400 px-2 py-0.5 rounded border border-amber-500/30 normal-case font-normal">Optional</span>
+                        </label>
+                        <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={(e) => e.target.files?.[0] && handleFileSelect(e.target.files[0])} />
+                        {!uploadPreview ? (
+                          <div onClick={() => fileInputRef.current?.click()} onDragOver={(e) => { e.preventDefault(); e.currentTarget.classList.add('border-amber-500') }} onDragLeave={(e) => { e.currentTarget.classList.remove('border-amber-500') }} onDrop={(e) => { e.preventDefault(); e.currentTarget.classList.remove('border-amber-500'); e.dataTransfer.files?.[0] && handleFileSelect(e.dataTransfer.files[0]) }} className="w-full px-5 py-6 bg-[#0b1120] border-2 border-dashed border-gray-700 rounded-xl text-gray-500 hover:border-gray-500 hover:text-gray-400 transition-all cursor-pointer flex flex-col items-center gap-2">
+                            <svg className="w-8 h-8 opacity-50" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+                            <span className="text-xs">Click or drag token icon here</span>
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-4 p-3 bg-[#0b1120] border border-gray-700 rounded-xl">
+                            <img src={uploadPreview} alt="preview" className="w-12 h-12 rounded-lg object-cover border border-gray-600" />
+                            <div className="flex-1 min-w-0"><p className="text-white text-sm truncate">{uploadFile?.name}</p><p className="text-gray-500 text-xs">{uploadFile && (uploadFile.size / 1024).toFixed(1)} KB</p></div>
+                            {uploadProgress === 'uploading' && <svg className="animate-spin h-5 w-5 text-amber-400" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg>}
+                            {uploadProgress === 'done' && <span className="text-amber-400 text-lg">✓</span>}
+                            {uploadProgress === 'error' && <span className="text-red-400 text-lg">✗</span>}
+                            <button onClick={clearUpload} className="text-gray-500 hover:text-red-400 transition-colors p-1" disabled={txLoading}><svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg></button>
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 )}
 
@@ -1088,7 +1284,7 @@ export const DashboardPage = () => {
                           <label className="text-xs font-bold text-gray-400 uppercase tracking-widest pl-1 flex items-center justify-between">
                             Amount (Tokens)
                             {activeSection === 'transfer' && selectedAsset && (
-                              <span className="text-[9px] bg-orange-500/20 text-orange-400 px-2 py-0.5 rounded border border-orange-500/30">
+                              <span className="text-[9px] bg-fuchsia-500/20 text-fuchsia-400 px-2 py-0.5 rounded border border-fuchsia-500/30">
                                 Decimals: {selectedAsset.decimals}
                               </span>
                             )}
@@ -1150,6 +1346,45 @@ export const DashboardPage = () => {
                           />
                         </div>
                       )}
+
+                      {/* NFT Artwork Upload (Mint ERC-721/1155 only) */}
+                      {activeSection === 'mint' && activeToken !== 'ERC20' && (
+                        <div className="col-span-1 md:col-span-2 space-y-4 mt-2 pt-4 border-t border-gray-700/50">
+                          <label className="text-xs font-bold text-gray-400 uppercase tracking-widest pl-1 flex items-center gap-2">NFT Artwork<span className="text-[9px] bg-purple-500/20 text-purple-400 px-2 py-0.5 rounded border border-purple-500/30 normal-case font-normal">Recommended</span></label>
+                          <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={(e) => e.target.files?.[0] && handleFileSelect(e.target.files[0])} />
+                          {!uploadPreview ? (
+                            <div onClick={() => fileInputRef.current?.click()} onDragOver={(e) => { e.preventDefault(); e.currentTarget.classList.add('border-purple-500') }} onDragLeave={(e) => { e.currentTarget.classList.remove('border-purple-500') }} onDrop={(e) => { e.preventDefault(); e.currentTarget.classList.remove('border-purple-500'); e.dataTransfer.files?.[0] && handleFileSelect(e.dataTransfer.files[0]) }} className="w-full px-5 py-8 bg-[#0b1120] border-2 border-dashed border-gray-700 rounded-xl text-gray-500 hover:border-gray-500 hover:text-gray-400 transition-all cursor-pointer flex flex-col items-center gap-2">
+                              <svg className="w-10 h-10 opacity-50" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+                              <span className="text-sm">Drop NFT artwork or click to browse</span>
+                              <span className="text-xs text-gray-600">PNG, JPG, WebP, GIF up to 50MB</span>
+                            </div>
+                          ) : (
+                            <div className="flex items-start gap-4 p-4 bg-[#0b1120] border border-gray-700 rounded-xl">
+                              <img src={uploadPreview} alt="preview" className="w-20 h-20 rounded-lg object-cover border border-gray-600 flex-shrink-0" />
+                              <div className="flex-1 min-w-0 space-y-1">
+                                <p className="text-white text-sm truncate">{uploadFile?.name}</p>
+                                <p className="text-gray-500 text-xs">{uploadFile && (uploadFile.size / 1024).toFixed(1)} KB</p>
+                                <div className="flex items-center gap-2 mt-1">
+                                  {uploadProgress === 'uploading' && <><svg className="animate-spin h-4 w-4 text-purple-400" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg><span className="text-xs text-purple-400">Uploading...</span></>}
+                                  {uploadProgress === 'done' && <span className="text-xs text-amber-400">✓ Uploaded to MinIO</span>}
+                                  {uploadProgress === 'error' && <span className="text-xs text-red-400">✗ Upload failed</span>}
+                                </div>
+                              </div>
+                              <button onClick={clearUpload} className="text-gray-500 hover:text-red-400 transition-colors p-1 flex-shrink-0" disabled={txLoading}><svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg></button>
+                            </div>
+                          )}
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div className="space-y-2">
+                              <label className="text-xs font-bold text-gray-400 uppercase tracking-widest pl-1">NFT Name</label>
+                              <input type="text" placeholder="e.g. Cool Cat #1" value={nftName} onChange={(e) => setNftName(e.target.value)} className="w-full px-5 py-3.5 bg-[#0b1120] border border-gray-700 rounded-xl text-white placeholder-gray-600 focus:border-purple-500 focus:ring-1 focus:ring-purple-500 outline-none transition-all shadow-inner" disabled={txLoading} />
+                            </div>
+                            <div className="space-y-2">
+                              <label className="text-xs font-bold text-gray-400 uppercase tracking-widest pl-1">Description</label>
+                              <input type="text" placeholder="e.g. A unique digital collectible" value={nftDescription} onChange={(e) => setNftDescription(e.target.value)} className="w-full px-5 py-3.5 bg-[#0b1120] border border-gray-700 rounded-xl text-white placeholder-gray-600 focus:border-purple-500 focus:ring-1 focus:ring-purple-500 outline-none transition-all shadow-inner" disabled={txLoading} />
+                            </div>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
                 )}
@@ -1157,20 +1392,14 @@ export const DashboardPage = () => {
                 {/* Submit Action */}
                 <div className="pt-8 mt-2">
                   <button
-                    onClick={() => {
-                      if (activeSection === 'deploy') {
-                        executeTransaction('deploy_contract', activeToken, '', '', '', deployName, deploySymbol, deployDecimals, deployInitialSupply)
-                      } else {
-                        executeTransaction(activeSection as 'mint'|'transfer', activeToken, interactTo === 'custom' ? '' : interactTo, interactAmount, interactTokenAddress)
-                      }
-                    }}
+                    onClick={handleSubmitWithUpload}
                     disabled={!smartWalletAddress || txLoading || (activeSection === 'deploy' ? (!deployName || !deploySymbol) : (!interactTokenAddress || interactTokenAddress === 'custom' || interactTo === 'custom'))}
                     className={`w-full py-4 px-6 rounded-xl font-bold text-white shadow-lg transition-all border border-black/10 flex items-center justify-center
                       ${(!smartWalletAddress || (activeSection === 'deploy' ? (!deployName || !deploySymbol) : (!interactTokenAddress || interactTokenAddress === 'custom' || interactTo === 'custom')))
                         ? 'bg-gray-800 cursor-not-allowed text-gray-500 shadow-none'
                         : txLoading
                           ? 'bg-amber-600/50 cursor-wait'
-                          : 'bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 transform hover:-translate-y-0.5 hover:shadow-amber-500/25'}
+                          : 'bg-gradient-to-r from-amber-600 to-fuchsia-600 hover:from-amber-500 hover:to-fuchsia-500 transform hover:-translate-y-0.5 hover:shadow-amber-500/25'}
                     `}
                   >
                     {txLoading ? (
@@ -1192,7 +1421,7 @@ export const DashboardPage = () => {
               {/* TX Terminal Style Results */}
               {txResult && (
                 <div className="bg-[#0b1120]/80 backdrop-blur-xl border border-amber-500/30 rounded-2xl p-6 shadow-2xl relative overflow-hidden">
-                  <div className="absolute top-0 left-0 w-1 h-full bg-gradient-to-b from-amber-400 to-orange-500"></div>
+                  <div className="absolute top-0 left-0 w-1 h-full bg-gradient-to-b from-amber-400 to-fuchsia-500"></div>
 
                   <div className="flex items-center justify-between mb-6">
                     <div className="flex items-center gap-3 text-amber-400 font-bold tracking-wide">
@@ -1229,6 +1458,36 @@ export const DashboardPage = () => {
                         </button>
                       </div>
                     </div>
+
+                    {/* Deployed Contract Address */}
+                    {deployedContractAddress && (
+                      <div className="bg-[#1e293b]/50 border border-gray-700/50 rounded-xl p-4" onContextMenu={(e) => handleContextMenu(e, deployedContractAddress, 'address')}>
+                        <span className="block text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-2 font-mono">Deployed Contract Address</span>
+                        <div className="flex items-center gap-3">
+                          <p className="flex-1 text-sm font-mono text-emerald-300 truncate">{deployedContractAddress}</p>
+                          <button
+                            onClick={() => {
+                              copyText(deployedContractAddress)
+                              setContractAddrCopied(true)
+                              setTimeout(() => setContractAddrCopied(false), 2000)
+                            }}
+                            onContextMenu={(e) => handleContextMenu(e, deployedContractAddress, 'address')}
+                            className={`flex-shrink-0 p-2 rounded-lg shadow-sm transition-all border ${
+                              contractAddrCopied
+                                ? 'text-green-400 bg-green-400/10 border-green-500/50'
+                                : 'text-gray-400 hover:text-white bg-[#0b1120] border-gray-700 hover:border-violet-500/50'
+                            }`}
+                            title="Copy Contract Address · Right-click for more"
+                          >
+                            {contractAddrCopied ? (
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"></path></svg>
+                            ) : (
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2 2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg>
+                            )}
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
               )}
